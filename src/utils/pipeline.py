@@ -39,12 +39,25 @@ def get_2d_bounding_boxes(obj_masks: List[np.ndarray]) -> List[Dict]:
     return compute_2d_boxes(obj_masks)
 
 
-def compute_height_map(depth_norm: np.ndarray, camera_height: float) -> np.ndarray:
-    MAX_HEIGHT_RANGE = 5
+def compute_height_map(depth_norm: np.ndarray, bev_cam_height: float,
+                       min_height: float = 0.1) -> np.ndarray:
+    """
+    depth_norm: ảnh depth đã chuẩn hóa [0,1] từ BEV depth renderer.
+    bev_cam_height: posi_y của BEVCamera (từ file cameraconfig).
+    
+    Giả định:
+        d = 0   → điểm nằm trên mặt đất (Y ≈ 0)
+        d = 1   → điểm ở vị trí cao bằng BEV camera (Y ≈ bev_cam_height)
+    """
     d = np.clip(depth_norm, 0.0, 1.0)
-    height = (1.0 - d) * MAX_HEIGHT_RANGE
-    height[height < 0.2] = 0.0
+
+    # Chiều cao thực tế (tương đối so với mặt đất Y=0)
+    height = (1-d) * float(bev_cam_height) /9
+
+    # Lọc noise: mọi thứ thấp hơn min_height coi như sát mặt đất → 0
+    height[height < min_height] = 0.0
     return height
+
 
 
 # ============================================================
@@ -55,7 +68,7 @@ def get_3d_bounding_boxes(
     height_map,
     resolution,
     offset: float = 1.01,
-    yshift: float = -0.3,
+    yshift: float = 0,
 ):
     H, W = height_map.shape
     cuboids = []
@@ -66,24 +79,28 @@ def get_3d_bounding_boxes(
             continue
 
         vals = height_map[mask_bool]
-        h_p90 = float(np.percentile(vals, 90))
+        h_max = float(np.max(vals))
 
         # classification thresholds
-        if h_p90 >= 2.20:       # BUS / CONTAINER
-            final_h = h_p90
-            color = [1.0, 0.0, 0.0]
-
-        elif h_p90 >= 1.70:    # CAR / SUV
-            final_h = h_p90
-            color = [1.0, 0.5, 0.0]
-
-        elif h_p90 >= 1.50:    # EVC
-            final_h = h_p90
+        if h_max >= 3.0:       # BUS / CONTAINER
+            final_h = h_max
+            # Màu ĐỎ CAM (Rất nổi bật)
+            color = [1.0, 0.2, 0.0] 
+            
+        elif h_max >= 2.7:    # LARGE CAR / TRUCK
+            final_h = h_max / 1.6
+            # Màu XANH LƠ (CYAN) - Tương phản tốt với đường nhựa
+            color = [0.0, 1.0, 1.0]
+            
+        elif h_max >= 2.4:    # EV / SEDAN
+            final_h = h_max / 2
+            # Màu XANH LÁ MẠ (LIME) - Dễ nhìn
             color = [0.0, 1.0, 0.0]
-
-        else:                  # NOISE / LOW
-            final_h = 0.1
-            color = [0.5, 0.5, 0.5]
+            
+        else:                  # NOISE / LOW OBSTACLES
+            final_h = h_max / 2.5
+            # Màu VÀNG (Yellow) hoặc TÍM (Magenta)
+            color = [1.0, 1.0, 0.0]
 
         corners = cuboid_corners(
             box["obb"],
@@ -169,8 +186,8 @@ def main():
     ap.add_argument("--resolution", type=float, default=DEFAULT_RES)
     ap.add_argument("--min-area", type=int, default=50)
     ap.add_argument("--vis", action="store_true")
-    ap.add_argument("--offset", type=float, default=1.01)
-    ap.add_argument("--yshift", type=float, default=-0.3)
+    ap.add_argument("--offset", type=float, default=30)
+    ap.add_argument("--yshift", type=float, default=0)
     args = ap.parse_args()
 
     root = Path(args.dataset_root)
@@ -188,7 +205,8 @@ def main():
     obj_masks = segment_objects(bev_mask, args.min_area)
 
     depth_norm = load_depth(str(depth_path))
-    height_map = compute_height_map(depth_norm, 3.0)
+    bev_cam_height = load_camera_bev_height(str(bev_height_path))
+    height_map = compute_height_map(depth_norm, bev_cam_height)
 
     boxes_2d = get_2d_bounding_boxes(obj_masks)
     cuboids = get_3d_bounding_boxes(
@@ -213,7 +231,7 @@ def main():
                     M[:3,:3] = np.array(ext["R"])
                     M[:3,3] = np.array(ext["t"]).flatten()
                     ext = M
-                camera_geoms.extend(create_camera_visuals(ext, color, size=2.0))
+                camera_geoms.extend(create_camera_visuals(ext, color, size=1.0))
 
     if args.vis:
         draw_3d_scene(cuboids, camera_geoms)

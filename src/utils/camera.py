@@ -71,13 +71,13 @@ def get_extrinsics(config_dict):
     View_Matrix[:3, :3] = R_view
     View_Matrix[:3, 3] = t_view.flatten()
 
-    # Correction matrix (identity by default, placeholder if needed)
-    Correction = np.diag([1.0, 1.0, 1.0, 1.0])
-
-    Extrinsic = Correction @ View_Matrix
+    Extrinsic = View_Matrix
     return Extrinsic
 
-
+def unity2opencv(Extrinsic_unity):
+    T = np.diag([1,-1,1,1])
+    Extrinsic_cv = T @ Extrinsic_unity
+    return Extrinsic_cv
 
 # ============================================================
 # Load Extrinsics for All Cameras from CSV File
@@ -134,7 +134,7 @@ def load_extrinsics(path: str) -> Dict[str, np.ndarray]:
                     "rot": [rot_x, rot_y, rot_z],
                 }
 
-                extrinsics[cam_name] = get_extrinsics(config)
+                extrinsics[cam_name] = unity2opencv(get_extrinsics(config))
 
             except Exception as exc:
                 print(f"[Warn] Skipping invalid row {row_idx} in {path}: {exc}")

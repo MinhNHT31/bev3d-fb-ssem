@@ -17,7 +17,7 @@ def shift2axle(obb: Dict, image_shape: Tuple[int, int], resolution: float, offse
     H_img, W_img = image_shape
 
     Xc = (cx - W_img / 2.0) * resolution
-    Zc = -(cy - H_img / 2.0) * resolution + offset
+    Zc = (H_img / 2.0-cy) * resolution + offset*resolution
 
     return {"center": (Xc, Zc), "size": (w_px, l_px), "angle": -yaw_deg}
 
@@ -95,7 +95,14 @@ def build_cuboid(corners: np.ndarray, color=(1.0, 1.0, 0.0)) -> o3d.geometry.Lin
 # ============================================================
 # DRAW CUBOIDS WITH CURVED EDGES ON IMAGE (CLEAN)
 # ============================================================
-def draw_cuboids_curved(img, corners_list, Matrix, K, D, xi, segments=10):
+import numpy as np
+import cv2
+from .projects import cam2image # Giữ import cũ của bạn
+
+def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=15):
+    """
+    cuboids_list: Danh sách các dict, mỗi dict phải có key "corners" và "color"
+    """
     vis = img.copy()
     h, w = img.shape[:2]
 
@@ -105,21 +112,39 @@ def draw_cuboids_curved(img, corners_list, Matrix, K, D, xi, segments=10):
         (0, 4), (1, 5), (2, 6), (3, 7)
     ]
 
-    for corners in corners_list:
+    for obj in cuboids_list:
+        # 1. Tách toạ độ và màu sắc
+        corners = obj["corners"]
+        
+        # Lấy màu (mặc định là Vàng nếu không có key 'color')
+        rgb = obj.get("color", [1.0, 1.0, 0.0]) 
+
+        # 2. Chuyển từ RGB (Float 0-1) sang BGR (Int 0-255) cho OpenCV
+        # Lưu ý: OpenCV dùng thứ tự Blue-Green-Red
+        r = int(rgb[0] * 255)
+        g = int(rgb[1] * 255)
+        b = int(rgb[2] * 255)
+        color_bgr = (b, g, r)
+
         for s, e in EDGES:
             p1, p2 = corners[s], corners[e]
             t = np.linspace(0, 1, segments).reshape(-1, 1)
             pts3d = p1 + (p2 - p1) * t
 
             uv, mask = cam2image(pts3d, Matrix, K, D, xi)
+            
+            # Bỏ qua nếu quá ít điểm hợp lệ
             if np.sum(mask) < 2:
                 continue
 
             pts = uv[mask].astype(np.int32)
+            
+            # Kiểm tra xem có điểm nào nằm trong ảnh không
             in_bound = np.all((pts >= 0) & (pts < [w, h]), axis=1)
 
             if np.any(in_bound):
-                cv2.polylines(vis, [pts.reshape(-1, 1, 2)], False, (0, 255, 255), 2, cv2.LINE_AA)
+                # 3. Vẽ với màu đã xử lý
+                cv2.polylines(vis, [pts.reshape(-1, 1, 2)], False, color_bgr, 2, cv2.LINE_AA)
 
     return vis
 

@@ -50,7 +50,7 @@ def compute_2d_boxes(obj_masks: List[np.ndarray]) -> List[Dict]:
                 "aabb": (int(x), int(y), int(bw), int(bh)),
                 "obb": {
                     "center": (float(cx), float(cy)),
-                    "size": (float(w), float(l)),
+                    "size": (float(w)+3, float(l)+3),
                     "angle": float(-angle),
                     "corners": box_pts.astype(np.float32),
                 },
