@@ -5,7 +5,14 @@ import numpy as np
 from pathlib import Path
 import logging
 import sys
-from tqdm import tqdm  # Cần cài thêm: pip install tqdm
+from tqdm import tqdm 
+import os
+
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure `src/` is on sys.path because `utils/` lives under `src/` in this repo
+src_dir = os.path.join(project_root, "src")
+if src_dir not in sys.path:
+    sys.path.append(src_dir)
 
 from utils.bbox3d import draw_cuboids_curved
 from utils.camera import load_intrinsics, load_extrinsics, load_camera_bev_height
