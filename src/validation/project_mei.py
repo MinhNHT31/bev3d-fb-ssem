@@ -43,7 +43,7 @@ def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
 
     # Find cuboid bottom plane Y
     c = cuboids[0]["corners"]
-    bottom_pts_cam = c[:4]
+    bottom_pts_cam = c[:4  ]
     pts_world = (cam2world @ np.hstack([bottom_pts_cam, np.ones((4,1))]).T).T
     y_world_mean = float(pts_world[:, 1].mean())
 
@@ -86,9 +86,8 @@ def main():
     ap.add_argument("--id", required=True)
     ap.add_argument("--resolution", type=float, default=100/(6*400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=1.01)
-    ap.add_argument("--yshift", type=float, default=-0.3)
-    ap.add_argument("--scale", type=float, default=1.0)
+    ap.add_argument("--offset", type=float, default=30)
+    ap.add_argument("--yshift", type=float, default=0)
     args = ap.parse_args()
 
     root = Path(args.dataset_root)
@@ -133,7 +132,6 @@ def main():
     }
 
     processed_images = {}
-    final_corners = [np.array(c["corners"], dtype=np.float64) * args.scale for c in cuboids]
 
     for view in ["front", "left", "right", "rear"]:
         img_path = root / "rgb" / view / f"{sample_id}.png"
@@ -144,21 +142,19 @@ def main():
         img = cv2.imread(str(img_path))
         if view in ["front", "rear"]:
             img = cv2.flip(img, 1)
-        else:
             img = cv2.flip(img, 0)
-
+    
         ext_key = cam_name_map[view]
         if ext_key in extrinsics_dict:
 
             Extrinsic = extrinsics_dict[ext_key]
-            img = draw_cuboids_curved(img, final_corners, Extrinsic, K, D, xi)
+            img = draw_cuboids_curved(img, cuboids, Extrinsic, K, D, xi)
 
             if view == "front":
                 img = draw_y_planes_on_front(img, Extrinsic, K, D, xi, cuboids)
 
         if view in ["front", "rear"]:
             img = cv2.flip(img, 1)
-        else:
             img = cv2.flip(img, 0)
 
         processed_images[view] = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

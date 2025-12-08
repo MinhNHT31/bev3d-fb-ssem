@@ -23,6 +23,7 @@ Extrinsic = ext_dict[cam_name]
 
 # Load test image
 img = cv2.imread(image_path)
+img = cv2.flip(img, 0)
 H, W = img.shape[:2]
 
 # ------ CREATE 3D GRID IN WORLD ------
@@ -42,6 +43,6 @@ uv, mask = cam2image(points, Extrinsic, K, D, xi)
 for (u, v) in uv[mask].astype(int):
     if 0 <= u < W and 0 <= v < H:
         img = cv2.circle(img, (u, v), 2, (0, 0, 255), -1)
-
+img = cv2.flip(img, 0)
 cv2.imshow("Grid Projection Debug", img)
 cv2.waitKey(0)
