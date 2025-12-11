@@ -151,8 +151,8 @@ def main():
     ap.add_argument("--id", required=True)
     ap.add_argument("--resolution", type=float, default=100/(6*400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=30)
-    ap.add_argument("--yshift", type=float, default=0)
+    ap.add_argument("--offset", type=float, default=33)
+    ap.add_argument("--yshift", type=float, default=-0.3)
     args = ap.parse_args()
 
     # Root folder for a dataset sample (expects subfolders like rgb/, depth/, seg/bev/)
