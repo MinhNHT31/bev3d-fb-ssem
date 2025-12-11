@@ -1,4 +1,34 @@
 #!/usr/bin/env python3
+"""
+make_video.py
+
+Create a composite visualization video from dataset frames.
+
+This script reads per-frame BEV masks, depth maps, and camera images,
+runs the BEV->3D pipeline to estimate cuboids, projects those cuboids
+onto camera views, and writes a tiled visualization video.
+
+Features:
+- Loads intrinsics and extrinsics from a camera calibration file.
+- Segments BEV masks into object instances and estimates 3D cuboids.
+- Renders each camera view (left, front, right, rear), a depth view,
+    and the BEV into a 2x3 composite frame and writes frames to a video.
+
+Usage (example):
+        python src/validation/make_video.py \
+                --dataset-root /path/to/images0/train \
+                --intrinsics /path/to/camera_intrinsics.yml \
+                --output seg_video.mp4 --fps 10 --offset 33 --yshift -0.3
+
+Notes:
+- The project `src/` directory is added to `sys.path` so local `utils` can be
+    imported when running the script directly. For production use prefer
+    installing the package (editable mode) or setting `PYTHONPATH`.
+- The script uses OpenCV for image I/O and video writing and assumes
+    images are organized under `<dataset-root>/seg/`, `<dataset-root>/depth/`,
+    and `<dataset-root>/seg/bev`.
+"""
+
 import argparse
 import cv2
 import numpy as np
@@ -9,7 +39,7 @@ from tqdm import tqdm
 import os
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Ensure `src/` is on sys.path because `utils/` lives under `src/` in this repo
+""" Ensure `src/` is on sys.path because `utils/` lives under `src/` in this repo """
 src_dir = os.path.join(project_root, "src")
 if src_dir not in sys.path:
     sys.path.append(src_dir)
@@ -32,9 +62,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("VIDEO_GEN")
 
-# ==========================================================
-# CLEAN Y-PLANE DRAWER
-# ==========================================================
+""" ========================================================== """
+""" CLEAN Y-PLANE DRAWER """
+""" ========================================================== """
 def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
     if img is None or img.size == 0 or not cuboids:
         return img
@@ -46,18 +76,18 @@ def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
     cam_center_world = (cam2world @ np.array([0,0,0,1], dtype=float).reshape(4,1)).flatten()
     cam_x, cam_y, cam_z = cam_center_world[:3]
 
-    # Find cuboid bottom plane Y
+    """ Find cuboid bottom plane Y """
     c = cuboids[0]["corners"]
     bottom_pts_cam = c[:4]
     pts_world = (cam2world @ np.hstack([bottom_pts_cam, np.ones((4,1))]).T).T
     y_world_mean = float(pts_world[:, 1].mean())
 
-    # Create ground grids
+    """ Create ground grids """
     xs = np.linspace(cam_x - 20, cam_x + 20, 41)
     zs = np.linspace(cam_z + 2, cam_z + 40, 40)
     X, Z = np.meshgrid(xs, zs)
 
-    # Plane 1: Ground Y=0
+    """ Plane 1: Ground Y=0 """
     Y0 = np.zeros_like(X)
     P0 = np.stack([X.ravel(), Y0.ravel(), Z.ravel()], axis=1)
     uv0, m0 = cam2image(P0, extrinsic, K, D, xi)
@@ -67,7 +97,7 @@ def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
         if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
             cv2.circle(img, (u, v), 1, (0, 0, 255), -1)
 
-    # Plane 2: Cuboid bottom plane
+    """ Plane 2: Cuboid bottom plane """
     Y1 = np.full_like(X, y_world_mean)
     P1 = np.stack([X.ravel(), Y1.ravel(), Z.ravel()], axis=1)
     uv1, m1 = cam2image(P1, extrinsic, K, D, xi)
@@ -79,20 +109,20 @@ def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
 
     return img
 
-# ==========================================================
-# HELPER: DRAW TEXT
-# ==========================================================
+""" ========================================================== """
+""" HELPER: DRAW TEXT """
+""" ========================================================== """
 def draw_text(img, text):
     cv2.putText(img, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 
                 1, (0, 255, 0), 2, cv2.LINE_AA)
     return img
 
-# ==========================================================
-# PROCESS SINGLE FRAME
-# ==========================================================
+""" ========================================================== """
+""" PROCESS SINGLE FRAME """
+""" ========================================================== """
 def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
     """
-    Xử lý 1 frame và trả về ảnh ghép (composite image)
+    Process one frame and return the composite image
     """
     bev_path = root / "seg" / "bev" / f"{sample_id}.png"
     depth_path = root / "depth" / f"{sample_id}.png"
@@ -101,7 +131,7 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
     if not bev_path.exists():
         return None
 
-    # 1. Pipeline 3D
+    """ 1. 3D pipeline """
     bev_mask = (load_depth(str(bev_path)) > 0).astype("uint8") * 255
     obj_masks = segment_objects(bev_mask, min_area=args.min_area)
     depth_norm = load_depth(str(depth_path))
@@ -120,7 +150,7 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
         args.offset, args.yshift
     )
     
-    # 2. Xử lý các view Camera
+    """ 2. Process camera views """
     cam_name_map = {
         "front": "Main Camera-front",
         "left":  "Main Camera-left",
@@ -128,20 +158,22 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
         "rear":  "Main Camera-rear",
     }
     
-    # Kích thước chuẩn để ghép ảnh (Width, Height)
+    """ Standard size for composing images (Width, Height) """
     target_size = (640, 480) 
     processed_images = {}
 
     for view in ["front", "left", "right", "rear"]:
-        img_path = root / "rgb" / view / f"{sample_id}.png"
+        img_path = root / "seg" / view / f"{sample_id}.png"
         if not img_path.exists():
             img = np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8)
         else:
             img = cv2.imread(str(img_path))
-            # Flip logic (giữ nguyên như code cũ)
+            """ Flip logic (kept from original code) """
+            """
             if view in ["front", "rear"]:
-                img = cv2.flip(img, 1) # Flip ngang
-                img = cv2.flip(img, 0) # Flip dọc
+                img = cv2.flip(img, 1) # horizontal flip
+                img = cv2.flip(img, 0) # vertical flip
+            """
 
             ext_key = cam_name_map[view]
             if ext_key in extrinsics_dict:
@@ -150,18 +182,18 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
                 if view == "front":
                     img = draw_y_planes_on_front(img, Extrinsic, K, D, xi, cuboids)
 
-            # Flip lại để hiển thị
+            """ Flip back for display """
             if view in ["front", "rear"]:
                 img = cv2.flip(img, 1)
                 img = cv2.flip(img, 0)
         
-        # Resize về chuẩn để ghép
+        """ Resize to standard size for composition """
         img = cv2.resize(img, target_size)
         draw_text(img, view.capitalize())
         processed_images[view] = img
 
-    # 3. Xử lý Depth & BEV
-    # Depth
+    """ 3. Process Depth & BEV """
+    """ Depth """
     depth_viz = cv2.imread(str(depth_path), cv2.IMREAD_ANYDEPTH)
     if depth_viz is None:
         depth_viz = np.zeros((target_size[1], target_size[0]), dtype=np.uint8)
@@ -170,31 +202,33 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
     depth_viz = cv2.resize(depth_viz, target_size)
     draw_text(depth_viz, "Depth")
 
-    # BEV
+    """ BEV """
     bev_viz = cv2.imread(str(bev_path))
     if bev_viz is None:
         bev_viz = np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8)
     else:
-        bev_viz = cv2.cvtColor(bev_viz, cv2.COLOR_BGR2RGB) # Code cũ dùng RGB cho plt, ở đây dùng BGR cho cv2
-        bev_viz = cv2.cvtColor(bev_viz, cv2.COLOR_RGB2BGR) # Convert lại BGR để write video
+        bev_viz = cv2.cvtColor(bev_viz, cv2.COLOR_BGR2RGB)
+        """ Old code used RGB for plt; here we use BGR for cv2 """
+        bev_viz = cv2.cvtColor(bev_viz, cv2.COLOR_RGB2BGR)
+        """ Convert back to BGR to write video """
     
     bev_viz = cv2.resize(bev_viz, target_size)
     draw_text(bev_viz, f"BEV (ID: {sample_id})")
 
-    # 4. Ghép ảnh (Grid 2x3)
-    # Row 1: Left | Front | Right
+    """ 4. Compose images (2x3 grid) """
+    """ Row 1: Left | Front | Right """
     row1 = cv2.hconcat([processed_images["left"], processed_images["front"], processed_images["right"]])
     
-    # Row 2: Depth | Rear | BEV
+    """ Row 2: Depth | Rear | BEV """
     row2 = cv2.hconcat([depth_viz, processed_images["rear"], bev_viz])
 
-    # Final Grid
+    """ Final Grid """
     grid = cv2.vconcat([row1, row2])
     return grid
 
-# ==========================================================
-# MAIN LOOP
-# ==========================================================
+""" ========================================================== """
+""" MAIN LOOP """
+""" ========================================================== """
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-root", required=True)
@@ -210,40 +244,41 @@ def main():
     args = ap.parse_args()
 
     root = Path(args.dataset_root)
-    
-    # 1. Tìm tất cả các frame
-    # Giả sử ID là tên file trong seg/bev (ví dụ: 0.png, 1.png, ...)
+
+    """ 1. Find all frames """
+    """ Assume IDs are filenames in seg/bev (e.g., 0.png, 1.png, ...) """
     bev_files = list((root / "seg" / "bev").glob("*.png"))
     if not bev_files:
-        print("Không tìm thấy dữ liệu trong seg/bev!")
+        print("No data found in seg/bev!")
         return
 
-    # Sắp xếp ID theo số (0, 1, 2... thay vì 0, 1, 10, 11)
+    """ Sort IDs numerically (0, 1, 2... instead of 0, 1, 10, 11) """
     try:
         sample_ids = sorted([p.stem for p in bev_files], key=lambda x: int(x))
     except ValueError:
-        sample_ids = sorted([p.stem for p in bev_files]) # Fallback nếu tên không phải số
+        sample_ids = sorted([p.stem for p in bev_files])
 
-    print(f"Tìm thấy {len(sample_ids)} frames. Đang chuẩn bị tạo video...")
+    print(f"Found {len(sample_ids)} frames. Preparing to create video...")
 
-    # 2. Load Config Global
+    """ 2. Load Config Global """
     K, D, xi = load_intrinsics(Path(args.intrinsics))
     config_path = root.parent.parent / "CameraCalibrationParameters" / "camera_positions_for_extrinsics.txt"
     extrinsics_dict = load_extrinsics(config_path)
 
     video_writer = None
 
-    # 3. Vòng lặp xử lý
+    """ 3. Processing loop """
     for sample_id in tqdm(sample_ids):
         frame = process_frame(sample_id, root, args, K, D, xi, extrinsics_dict)
         
         if frame is None:
             continue
 
-        # Khởi tạo VideoWriter tại frame đầu tiên (vì giờ mới biết kích thước ảnh)
+        """ Initialize VideoWriter at first frame (we know frame size now) """
         if video_writer is None:
             h, w = frame.shape[:2]
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Hoặc 'XVID' nếu lỗi
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            """ Or 'XVID' if it fails """
             video_writer = cv2.VideoWriter(args.output, fourcc, args.fps, (w, h))
             print(f"Video Resolution: {w}x{h}")
 
@@ -251,9 +286,9 @@ def main():
 
     if video_writer:
         video_writer.release()
-        print(f"\n✅ Video đã được lưu tại: {args.output}")
+        print(f"\n✅ Video saved to: {args.output}")
     else:
-        print("❌ Không tạo được video (có thể không load được frame nào).")
+        print("❌ Video not created (maybe no frames were loaded).")
 
 if __name__ == "__main__":
     main()
