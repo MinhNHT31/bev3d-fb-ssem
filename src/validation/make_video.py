@@ -279,7 +279,7 @@ def main():
             h, w = frame.shape[:2]
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             """ Or 'XVID' if it fails """
-            video_writer = cv2.VideoWriter(args.output, fourcc, args.fps, (w, h))
+            video_writer = cv2.VideoWriter(root.parent.parent / args.output, fourcc, args.fps, (w, h))
             print(f"Video Resolution: {w}x{h}")
 
         video_writer.write(frame)

@@ -73,35 +73,58 @@ def get_3d_bounding_boxes(
     H, W = height_map.shape
     cuboids = []
 
+    # Dataset color palette normalized 0–1
+    COLOR_GROUND        = [0/255,   0/255,   0/255]
+    COLOR_NON_DRIVE     = [60/255,  60/255,  0/255]
+    COLOR_EV            = [0/255,   0/255, 120/255]
+    COLOR_BUS           = [150/255,150/255,150/255]
+    COLOR_CAR           = [255/255,255/255,255/255]
+
     for box in boxes_2d:
         mask_bool = box["mask"].astype(bool)
-        if mask_bool.sum() < 15:
+        pix_count = mask_bool.sum()
+
+        # Bỏ vật thể bé quá (noise)
+        if pix_count < 10:
             continue
 
+        # ====== Tính diện tích BEV ======
+        area = pix_count * (resolution ** 2)
+
+        # ====== Tính chiều cao cực đại ======
         vals = height_map[mask_bool]
         h_max = float(np.max(vals))
 
-        # classification thresholds
-        if h_max >= 3.0:       # BUS / CONTAINER
-            final_h = h_max
-            # Màu ĐỎ CAM (Rất nổi bật)
-            color = [1.0, 0.2, 0.0] 
-            
-        elif h_max >= 2.7:    # LARGE CAR / TRUCK
-            final_h = h_max / 1.6
-            # Màu XANH LƠ (CYAN) - Tương phản tốt với đường nhựa
-            color = [0.0, 1.0, 1.0]
-            
-        elif h_max >= 2.4:    # EV / SEDAN
-            final_h = h_max / 2
-            # Màu XANH LÁ MẠ (LIME) - Dễ nhìn
-            color = [0.0, 1.0, 0.0]
-            
-        else:                  # NOISE / LOW OBSTACLES
-            final_h = h_max / 2.5
-            # Màu VÀNG (Yellow) hoặc TÍM (Magenta)
-            color = [1.0, 1.0, 0.0]
+        # ==============================================================
+        # PHÂN LOẠI OBJECT THEO (HEIGHT, AREA) — GÁN MÀU THEO DATASET
+        # ==============================================================
 
+        # 1️⃣ BUS / LARGE TRUCK
+        if h_max >= 2.8 and area >= 7.0:
+            final_h = h_max
+            color = COLOR_BUS
+
+        # 2️⃣ LARGE CAR / VAN / PICKUP
+        elif h_max >= 2.4 and area >= 5.0:
+            final_h = h_max / 1.2
+            color = COLOR_CAR
+
+        # 3️⃣ SEDAN / SUV
+        elif h_max >= 1.6 and area >= 2.0:
+            final_h = h_max / 1.6
+            color = COLOR_CAR
+
+        # 4️⃣ SMALL VEHICLE / MOTORCYCLE
+        elif h_max >= 1.0 and area >= 0.5:
+            final_h = h_max / 2.0
+            color = COLOR_EV   # dataset không có motor → dùng class nhỏ nhất
+
+        # 5️⃣ NOISE / LOW OBJECTS
+        else:
+            final_h = h_max / 3.0
+            color = COLOR_NON_DRIVE
+
+        # ====== Xây cuboid ======
         corners = cuboid_corners(
             box["obb"],
             (H, W),
@@ -116,7 +139,9 @@ def get_3d_bounding_boxes(
             "obb": box["obb"],
             "corners": corners,
             "lineset": build_cuboid(corners),
-            "color": color
+            "color": color,
+            "h_max": h_max,
+            "area": area,
         })
 
     return cuboids
