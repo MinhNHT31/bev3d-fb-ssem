@@ -95,11 +95,7 @@ def build_cuboid(corners: np.ndarray, color=(1.0, 1.0, 0.0)) -> o3d.geometry.Lin
 # ============================================================
 # DRAW CUBOIDS WITH CURVED EDGES ON IMAGE (CLEAN)
 # ============================================================
-<<<<<<< HEAD
-=======
-
->>>>>>> 40594a1 (fix height)
-def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=15):
+def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=20):
     """
     cuboids_list: Danh sách các dict, mỗi dict phải có key "corners" và "color"
     """
