@@ -57,6 +57,7 @@ from utils.camera import load_intrinsics, load_extrinsics, load_camera_bev_heigh
 from utils.projects import cam2image
 from utils.pipeline import (
     load_depth,
+    load_seg,
     compute_height_map,
     segment_objects,
     get_2d_bounding_boxes,
@@ -125,14 +126,14 @@ def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
         if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
             cv2.circle(img, (u, v), 1, (0, 0, 255), -1)
 
-    # Plane 2: Cuboid bottom mean Y (blue)
-    Y1 = np.full_like(X, y_world_mean)
-    P1 = np.stack([X.ravel(), Y1.ravel(), Z.ravel()], axis=1)
-    uv1, m1 = cam2image(P1, extrinsic, K, D, xi)
-    uv1 = uv1[m1].astype(int)
-    for (u, v) in uv1:
-        if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
-            cv2.circle(img, (u, v), 1, (255, 0, 0), -1)
+    # # Plane 2: Cuboid bottom mean Y (blue)
+    # Y1 = np.full_like(X, y_world_mean)
+    # P1 = np.stack([X.ravel(), Y1.ravel(), Z.ravel()], axis=1)
+    # uv1, m1 = cam2image(P1, extrinsic, K, D, xi)
+    # uv1 = uv1[m1].astype(int)
+    # for (u, v) in uv1:
+    #     if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
+    #         cv2.circle(img, (u, v), 1, (255, 0, 0), -1)
 
     return img
 
@@ -168,8 +169,9 @@ def main():
         return
 
     # Load BEV mask and compute object masks (pipeline utilities handle formats)
-    bev_mask = (load_depth(str(bev_path)) > 0).astype("uint8") * 255
-    obj_masks = segment_objects(bev_mask, min_area=args.min_area)
+    bev_seg = load_seg(str(bev_path))
+    obj_masks = segment_objects(bev_seg, min_area=args.min_area)
+
     depth_norm = load_depth(str(depth_path))
 
     # Optionally read camera-specific BEV height offset if available

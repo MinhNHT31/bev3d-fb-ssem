@@ -23,20 +23,87 @@ def load_depth(path: str) -> np.ndarray:
         raise FileNotFoundError(f"Cannot read depth: {path}")
     return depth.astype(np.float32) / 255.0
 
+def load_seg(path: str) -> np.ndarray:
+    """
+    Load segmentation image exactly as RGB array (H, W, 3),
+    preserving all dataset class colors.
 
-def segment_objects(mask_img: np.ndarray, min_area: int = 5) -> List[np.ndarray]:
-    mask = (mask_img > 0).astype(np.uint8)
-    num, labels = cv2.connectedComponents(mask)
-    objs = []
-    for idx in range(1, num):
-        comp = (labels == idx).astype(np.uint8) * 255
-        if cv2.countNonZero(comp) >= min_area:
-            objs.append(comp)
-    return objs
+    Returns: RGB ndarray, dtype uint8
+    """
+    img = cv2.imread(path, cv2.IMREAD_COLOR)
+    if img is None:
+        raise FileNotFoundError(f"Cannot read segmentation image: {path}")
+
+    # convert from BGR → RGB
+    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+def segment_objects(seg_img: np.ndarray, min_area: int = 5, palette=None):
+    """
+    seg_img can be:
+        - BEV mask (grayscale): pixel>0 means object
+        - segmentation image (RGB multi-class)
+    """
+    # # Case 1: BEV binary mask
+    # if seg_img.ndim == 2:
+    #     mask = (seg_img > 0).astype(np.uint8)
+    #     num, labels = cv2.connectedComponents(mask)
+    #     objects = []
+    #     for idx in range(1, num):
+    #         comp = (labels == idx).astype(np.uint8)
+    #         if comp.sum() < min_area:
+    #             continue
+    #         objects.append({
+    #             "mask": comp * 255,
+    #             "label": 1,
+    #             "color": [1.0, 1.0, 1.0]   # default white
+    #         })
+    #     return objects
+
+    # Case 2: segmentation RGB image
+    seg_rgb = seg_img
+    label_img = (
+        seg_rgb[:, :, 0].astype(np.int32) * 256*256 +
+        seg_rgb[:, :, 1].astype(np.int32) * 256 +
+        seg_rgb[:, :, 2].astype(np.int32)
+    )
+
+    objects = []
+    for val in np.unique(label_img):
+        if val == 0:
+            continue
+
+        class_mask = (label_img == val).astype(np.uint8)
+        num, labels = cv2.connectedComponents(class_mask)
+
+        for idx in range(1, num):
+            comp = (labels == idx).astype(np.uint8)
+            if comp.sum() < min_area:
+                continue
+
+            rgb = np.mean(seg_rgb[labels == idx], axis=0) / 255.0
+            objects.append({
+                "mask": comp * 255,
+                "label": int(val),
+                "color": [float(c) for c in rgb],
+            })
+    return objects
 
 
-def get_2d_bounding_boxes(obj_masks: List[np.ndarray]) -> List[Dict]:
-    return compute_2d_boxes(obj_masks)
+
+
+def get_2d_bounding_boxes(obj_masks):
+    # Allow downstream functions to pass along metadata (color/label) per object
+    raw_masks = [o["mask"] if isinstance(o, dict) else o for o in obj_masks]
+    boxes = compute_2d_boxes(raw_masks)
+    for box, o in zip(boxes, obj_masks):
+        if isinstance(o, dict):
+            if "color" in o:
+                box["color"] = o["color"]
+            if "label" in o:
+                box["label"] = o["label"]
+    return boxes
+
+
 
 
 def compute_height_map(depth_norm: np.ndarray, bev_cam_height: float,
@@ -73,34 +140,29 @@ def get_3d_bounding_boxes(
     H, W = height_map.shape
     cuboids = []
 
-    # Dataset color palette normalized 0–1
-    # COLOR_GROUND        = [0/255,   0/255,   0/255]
-    COLOR_NON_DRIVE     = [60/255,  60/255,  0/255]
-    COLOR_EV            = [0/255,   0/255, 120/255]
-    COLOR_BUS           = [150/255,150/255,150/255]
-    COLOR_CAR           = [255/255,255/255,255/255]
 
     for box in boxes_2d:
         mask_bool = box["mask"].astype(bool)
+        color = box['color']*255
 
         vals = height_map[mask_bool]
         h_max = float(np.max(vals))
 
-        if h_max >= 2.8:
+        if h_max >= 3.0:
             final_h = h_max
-            color = COLOR_BUS
+            color = color
 
         elif h_max >= 2.4:
             final_h = h_max / 2
-            color = COLOR_CAR
+            color = color
 
-        elif h_max >= 1.0:
+        elif h_max >= 2.3:
             final_h = h_max / 2.2
-            color = COLOR_EV  
+            color = color  
 
         else:
             final_h = h_max / 3.0
-            color = COLOR_NON_DRIVE
+            color = color
 
         # ====== Xây cuboid ======
         corners = cuboid_corners(
@@ -179,13 +241,11 @@ def draw_3d_scene(cuboids, camera_geoms_list):
 # ============================================================
 # MAIN
 # ============================================================
-DEFAULT_RES = 100 / (6 * 400)
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-root", required=True)
     ap.add_argument("--id", required=True)
-    ap.add_argument("--resolution", type=float, default=DEFAULT_RES)
+    ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
     ap.add_argument("--vis", action="store_true")
     ap.add_argument("--offset", type=float, default=30)
@@ -203,8 +263,9 @@ def main():
         print("Error: BEV not found")
         return
 
-    bev_mask = (load_depth(str(bev_path)) > 0).astype("uint8") * 255
-    obj_masks = segment_objects(bev_mask, args.min_area)
+    bev_seg = load_seg(str(bev_path))
+    obj_masks = segment_objects(bev_seg, min_area=args.min_area)
+
 
     depth_norm = load_depth(str(depth_path))
     bev_cam_height = load_camera_bev_height(str(bev_height_path))
