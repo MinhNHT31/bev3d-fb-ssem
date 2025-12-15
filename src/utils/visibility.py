@@ -150,5 +150,5 @@ def compute_cuboid_visibility(
         return 1  # visible
 
     else:
-        # object occluded → tùy chọn giữ hoặc bỏ
+        # object is occluded → optionally keep label 2 or drop to 0
         return 2 if keep_occlusion else 0

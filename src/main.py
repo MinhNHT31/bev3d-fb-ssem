@@ -3,28 +3,34 @@
 MAIN PROCESSING PIPELINE FOR FB-SSEM OCCLUSION MASK GENERATION
 ===============================================================
 
-Chức năng:
-    - Quét toàn bộ dataset FB-SSEM (images0, images1, ...)
-    - Với mỗi split: train / val / test
-    - Tìm tất cả file BEV segmentation:  images*/(train|val|test)/seg/bev/*.png
-    - Với mỗi file:
-          + Tạo visibility mask (0/1/2)
-          + Ghi kết quả vào:
+What it does:
+    - Scan the full FB-SSEM dataset (images0, images1, ...)
+    - For each split: train / val / test
+    - Find all BEV segmentation files:  images*/(train|val|test)/seg/bev/*.png
+    - For each file:
+          + Build a visibility mask (0/1/2)
+          + Write results to:
                 imagesX/split/seg/bev_raw/{id}.png   (0/1/2)
                 imagesX/split/seg/bev_occ/{id}.png   (visualization 0/180/255)
-      - Nếu **--keep-occlusion**:
+      - If **--keep-occlusion**:
             1 = visible, 2 = occluded
-        Nếu **KHÔNG** dùng --keep-occlusion:
-            1 = visible, 0 = occluded (bị loại, trở thành background)
+        If **NOT** using --keep-occlusion:
+            1 = visible, 0 = occluded (dropped to background)
 
-    - Multiprocessing + tqdm để xử lý nhanh, progress rõ ràng.
+    - Multiprocessing + tqdm for fast, clean progress.
 
-Chạy ví dụ:
+Run example:
     python main.py \
         --dataset-root /media/.../FB-SSEM \
         --keep-occlusion \
         --num-workers 8
 """
+# Quick overview:
+# - Scans every split in the FB-SSEM dataset for BEV segmentations.
+# - For each BEV file, builds 3D cuboids from the BEV mask + depth, projects them into every camera view,
+#   and labels each BEV pixel as visible or occluded based on whether the cuboid is seen from any camera.
+# - Writes two outputs beside the source BEV: `seg/bev_raw/<id>.png` (raw labels 0/1/2) and
+#   `seg/bev_occ/<id>.png` (visualization 0/180/255). If `--keep-occlusion` is off, occluded pixels become 0.
 
 import os
 import sys
@@ -60,7 +66,7 @@ from utils.visibility import compute_cuboid_visibility
 
 
 # --------------------------------------------------------------
-# Logger (giữ yên lặng, chỉ dùng khi cần)
+# Logger (quiet by default; enable when needed)
 # --------------------------------------------------------------
 logger = logging.getLogger("fb_ssem_main")
 logger.setLevel(logging.ERROR)
@@ -74,10 +80,10 @@ logger.addHandler(handler)
 # =====================================================================
 def process_single_bev(args):
     """
-    Xử lý 1 file BEV duy nhất (chạy trong worker process).
+    Process a single BEV file (runs inside a worker process).
 
     Args tuple:
-        bev_path        : str - đường dẫn tới seg/bev/{id}.png
+        bev_path        : str - path to seg/bev/{id}.png
         intrinsics      : (K, D, xi)
         extrinsics      : dict extrinsic
         keep_occlusion  : bool
@@ -102,11 +108,11 @@ def process_single_bev(args):
     ) = args
 
     bev_path = Path(bev_path)
-    # ví dụ: .../images0/train/seg/bev/123.png  -> root = .../images0/train
+    # example: .../images0/train/seg/bev/123.png  -> root = .../images0/train
     root = bev_path.parents[2]
     sid = bev_path.stem  # "123"
 
-    # Thư mục output: cùng level với bev/
+    # Output directories at the same level as bev/
     seg_dir = bev_path.parent                  # .../seg/bev
     bev_raw_dir = seg_dir.parent / "bev_raw"   # .../seg/bev_raw
     bev_occ_dir = seg_dir.parent / "bev_occ"   # .../seg/bev_occ
@@ -122,7 +128,7 @@ def process_single_bev(args):
     H, W = bev_seg.shape[:2]
     obj_masks = segment_objects(bev_seg, min_area=min_area)
     if not obj_masks:
-        # không có object -> lưu toàn 0 và bỏ qua
+        # no object -> save zeros and skip
         bev_mask = np.zeros((H, W), np.uint8)
         cv2.imwrite(str(bev_raw_dir / f"{sid}.png"), bev_mask)
         cv2.imwrite(str(bev_occ_dir / f"{sid}.png"), bev_mask)
@@ -193,10 +199,10 @@ def process_single_bev(args):
         bev_mask_raw[obj["mask"] > 0] = label
 
     # ----------------- 6. Save output -----------------
-    # raw 0/1/2 (hoặc 0/1 nếu keep_occlusion=False)
+    # raw 0/1/2 (or 0/1 if keep_occlusion=False)
     cv2.imwrite(str(bev_raw_dir / f"{sid}.png"), bev_mask_raw)
 
-    # visualization 0/180/255 để dễ nhìn
+    # visualization 0/180/255 for quick viewing
     vis = np.zeros_like(bev_mask_raw)
     vis[bev_mask_raw == 1] = 180
     vis[bev_mask_raw == 2] = 255
@@ -211,10 +217,10 @@ def process_single_bev(args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-root", required=True,
-                    help="FB-SSEM root (chứa CameraCalibrationParameters, images0, images1, ...)")
+                    help="FB-SSEM root (contains CameraCalibrationParameters, images0, images1, ...)")
     ap.add_argument("--keep-occlusion", action="store_true",
-                    help="Nếu bật: giữ label=2 cho object bị che; "
-                         "Nếu tắt: object bị che -> label=0 (background)")
+                    help="If set: keep label=2 for occluded objects; "
+                         "If not set: occluded objects -> label=0 (background)")
     ap.add_argument("--num-workers", type=int, default=8)
 
     ap.add_argument("--visibility-thresh", type=float, default=0.33)
@@ -275,7 +281,7 @@ def main():
             desc="Processing BEV files",
             ncols=100,
         ):
-            # không in gì trong loop để progress bar sạch
+            # keep loop silent so the progress bar stays clean
             pass
 
     print("=== DONE PROCESSING ALL BEV FILES (train/val/test) ===")
