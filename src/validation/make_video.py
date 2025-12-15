@@ -168,17 +168,17 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
     processed_images = {}
 
     for view in ["front", "left", "right", "rear"]:
-        img_path = root / "seg" / view / f"{sample_id}.png"
+        img_path = root / "rgb" / view / f"{sample_id}.png"
         if not img_path.exists():
             img = np.zeros((target_size[1], target_size[0], 3), dtype=np.uint8)
         else:
             img = cv2.imread(str(img_path))
             """ Flip logic (kept from original code) """
-            """
+
             if view in ["front", "rear"]:
                 img = cv2.flip(img, 1) # horizontal flip
                 img = cv2.flip(img, 0) # vertical flip
-            """
+            
 
             ext_key = cam_name_map[view]
             if ext_key in extrinsics_dict:
