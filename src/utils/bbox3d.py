@@ -5,6 +5,7 @@ import cv2
 
 from .projects import cam2image
 
+# 3D cuboid construction and rendering helpers built on top of 2D OBBs.
 
 # ============================================================
 # SHIFT OBB TO AXLE (NO LOG)
@@ -95,9 +96,9 @@ def build_cuboid(corners: np.ndarray, color=(1.0, 1.0, 0.0)) -> o3d.geometry.Lin
 # ============================================================
 # DRAW CUBOIDS WITH CURVED EDGES ON IMAGE (CLEAN)
 # ============================================================
-def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=15):
+def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=20):
     """
-    cuboids_list: Danh sách các dict, mỗi dict phải có key "corners" và "color"
+    cuboids_list: list of dicts, each expected to have keys "corners" and "color"
     """
     vis = img.copy()
     h, w = img.shape[:2]
@@ -109,14 +110,13 @@ def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=15):
     ]
 
     for obj in cuboids_list:
-        # 1. Tách toạ độ và màu sắc
+        # 1. Extract geometry and color
         corners = obj["corners"]
         
-        # Lấy màu (mặc định là Vàng nếu không có key 'color')
+        # Default to yellow if no per-object color is provided
         rgb = obj.get("color", [1.0, 1.0, 0.0]) 
 
-        # 2. Chuyển từ RGB (Float 0-1) sang BGR (Int 0-255) cho OpenCV
-        # Lưu ý: OpenCV dùng thứ tự Blue-Green-Red
+        # 2. Convert RGB floats [0,1] to BGR ints [0,255] for OpenCV drawing
         r = int(rgb[0] * 255)
         g = int(rgb[1] * 255)
         b = int(rgb[2] * 255)
@@ -129,17 +129,17 @@ def draw_cuboids_curved(img, cuboids_list, Matrix, K, D, xi, segments=15):
 
             uv, mask = cam2image(pts3d, Matrix, K, D, xi)
             
-            # Bỏ qua nếu quá ít điểm hợp lệ
+            # Skip edges without enough valid projections
             if np.sum(mask) < 2:
                 continue
 
             pts = uv[mask].astype(np.int32)
             
-            # Kiểm tra xem có điểm nào nằm trong ảnh không
+            # Check if any projected points fall inside the image bounds
             in_bound = np.all((pts >= 0) & (pts < [w, h]), axis=1)
 
             if np.any(in_bound):
-                # 3. Vẽ với màu đã xử lý
+                # 3. Draw polylines with the converted color
                 cv2.polylines(vis, [pts.reshape(-1, 1, 2)], False, color_bgr, 2, cv2.LINE_AA)
 
     return vis

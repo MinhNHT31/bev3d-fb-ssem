@@ -49,6 +49,7 @@ from utils.camera import load_intrinsics, load_extrinsics, load_camera_bev_heigh
 from utils.projects import cam2image
 from utils.pipeline import (
     load_depth,
+    load_seg,
     compute_height_map,
     segment_objects,
     get_2d_bounding_boxes,
@@ -61,6 +62,9 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("VIDEO_GEN")
+
+# Batch visualizer that tiles camera views, depth, and BEV with projected
+# cuboids into a video for quick qualitative review.
 
 """ ========================================================== """
 """ CLEAN Y-PLANE DRAWER """
@@ -97,15 +101,15 @@ def draw_y_planes_on_front(img, extrinsic, K, D, xi, cuboids):
         if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
             cv2.circle(img, (u, v), 1, (0, 0, 255), -1)
 
-    """ Plane 2: Cuboid bottom plane """
-    Y1 = np.full_like(X, y_world_mean)
-    P1 = np.stack([X.ravel(), Y1.ravel(), Z.ravel()], axis=1)
-    uv1, m1 = cam2image(P1, extrinsic, K, D, xi)
-    uv1 = uv1[m1].astype(int)
+    # """ Plane 2: Cuboid bottom plane """
+    # Y1 = np.full_like(X, y_world_mean)
+    # P1 = np.stack([X.ravel(), Y1.ravel(), Z.ravel()], axis=1)
+    # uv1, m1 = cam2image(P1, extrinsic, K, D, xi)
+    # uv1 = uv1[m1].astype(int)
 
-    for (u, v) in uv1:
-        if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
-            cv2.circle(img, (u, v), 1, (255, 0, 0), -1)
+    # for (u, v) in uv1:
+    #     if 0 <= u < img.shape[1] and 0 <= v < img.shape[0]:
+    #         cv2.circle(img, (u, v), 1, (255, 0, 0), -1)
 
     return img
 
@@ -132,8 +136,9 @@ def process_frame(sample_id, root, args, K, D, xi, extrinsics_dict):
         return None
 
     """ 1. 3D pipeline """
-    bev_mask = (load_depth(str(bev_path)) > 0).astype("uint8") * 255
-    obj_masks = segment_objects(bev_mask, min_area=args.min_area)
+    # Load BEV mask and compute object masks (pipeline utilities handle formats)
+    bev_seg = load_seg(str(bev_path))
+    obj_masks = segment_objects(bev_seg, min_area=args.min_area)
     depth_norm = load_depth(str(depth_path))
 
     cam_h = None
@@ -266,7 +271,8 @@ def main():
     extrinsics_dict = load_extrinsics(config_path)
 
     video_writer = None
-
+    output_path = Path("videos") / args.output
+    output_path.parent.mkdir(parents=True, exist_ok=True) 
     """ 3. Processing loop """
     for sample_id in tqdm(sample_ids):
         frame = process_frame(sample_id, root, args, K, D, xi, extrinsics_dict)
@@ -279,14 +285,16 @@ def main():
             h, w = frame.shape[:2]
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             """ Or 'XVID' if it fails """
-            video_writer = cv2.VideoWriter(root.parent.parent / args.output, fourcc, args.fps, (w, h))
+             # ensure videos/ exists
+            video_writer = cv2.VideoWriter(str(output_path), fourcc, args.fps, (w, h))
+
             print(f"Video Resolution: {w}x{h}")
 
         video_writer.write(frame)
 
     if video_writer:
         video_writer.release()
-        print(f"\n✅ Video saved to: {args.output}")
+        print(f"\n✅ Video saved to: {output_path}")
     else:
         print("❌ Video not created (maybe no frames were loaded).")
 

@@ -10,6 +10,7 @@ from utils.camera import load_intrinsics, load_extrinsics
 from utils.projects import cam2image
 
 # ========== CONFIG ==========
+# Quick calibration sanity check: projects a ground grid onto a sample image.
 intrinsic_path = mei_yaml
 extrinsic_path = cfg_extr
 cam_name = "Main Camera-front"

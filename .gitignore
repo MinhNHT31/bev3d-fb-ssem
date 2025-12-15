@@ -29,5 +29,8 @@ outputs/
 *.log
 
 #video_demo
+videos/
 *.mp4
 
+#images
+*.png

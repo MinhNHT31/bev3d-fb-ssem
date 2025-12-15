@@ -2,11 +2,13 @@ import logging
 import numpy as np
 from typing import Tuple
 
-# Cấu hình logging
+# Projection utilities for the Unified MEI camera model (fisheye-like).
+
+# Configure logging for quick console debugging
 logger = logging.getLogger("GeometryDebug")
 logger.setLevel(logging.DEBUG)
 
-# Tạo handler để in ra màn hình console
+# Console handler to see debug output immediately
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter('[%(levelname)s] %(message)s')

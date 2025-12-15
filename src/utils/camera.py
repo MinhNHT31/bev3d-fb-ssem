@@ -4,6 +4,9 @@ import cv2
 import csv
 from typing import Dict
 
+# Camera helpers convert Unity-style calibration files into OpenCV-friendly
+# intrinsics/extrinsics for the projection utilities.
+
 
 # ============================================================
 # Utility: Build Extrinsic Matrix (World → Camera)

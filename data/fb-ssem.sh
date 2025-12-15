@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Convenience downloader for the FB-SSEM dataset (requires aria2c + unzip).
 TARGET_DIR="FB-SSEM"
 mkdir -p "$TARGET_DIR"
 
