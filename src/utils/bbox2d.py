@@ -3,6 +3,8 @@ import numpy as np
 from typing import List, Dict, Tuple
 
 
+# 2D bounding-box utilities for extracting oriented boxes from BEV masks.
+
 def _normalize_rect(rect: Tuple[Tuple[float, float], Tuple[float, float], float]):
     """
     Normalize minAreaRect so width >= length and angle is consistent.

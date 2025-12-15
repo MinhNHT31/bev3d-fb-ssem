@@ -13,6 +13,8 @@ from utils.bbox3d import cuboid_corners, build_cuboid
 from utils.camera import load_camera_bev_height, load_extrinsics
 np.set_printoptions(precision=3, suppress=True)
 
+# End-to-end helpers for lifting BEV segmentation and depth maps into 3D
+# cuboids plus optional Open3D visualization assets.
 
 # ============================================================
 # DATA PROCESSING
@@ -43,23 +45,6 @@ def segment_objects(seg_img: np.ndarray, min_area: int = 5, palette=None):
         - BEV mask (grayscale): pixel>0 means object
         - segmentation image (RGB multi-class)
     """
-    # # Case 1: BEV binary mask
-    # if seg_img.ndim == 2:
-    #     mask = (seg_img > 0).astype(np.uint8)
-    #     num, labels = cv2.connectedComponents(mask)
-    #     objects = []
-    #     for idx in range(1, num):
-    #         comp = (labels == idx).astype(np.uint8)
-    #         if comp.sum() < min_area:
-    #             continue
-    #         objects.append({
-    #             "mask": comp * 255,
-    #             "label": 1,
-    #             "color": [1.0, 1.0, 1.0]   # default white
-    #         })
-    #     return objects
-
-    # Case 2: segmentation RGB image
     seg_rgb = seg_img
     label_img = (
         seg_rgb[:, :, 0].astype(np.int32) * 256*256 +
@@ -109,19 +94,19 @@ def get_2d_bounding_boxes(obj_masks):
 def compute_height_map(depth_norm: np.ndarray, bev_cam_height: float,
                        min_height: float = 0.1) -> np.ndarray:
     """
-    depth_norm: ảnh depth đã chuẩn hóa [0,1] từ BEV depth renderer.
-    bev_cam_height: posi_y của BEVCamera (từ file cameraconfig).
+    depth_norm: normalized [0,1] depth rendered from BEV camera.
+    bev_cam_height: BEVCamera posi_y from cameraconfig.
     
-    Giả định:
-        d = 0   → điểm nằm trên mặt đất (Y ≈ 0)
-        d = 1   → điểm ở vị trí cao bằng BEV camera (Y ≈ bev_cam_height)
+    Assumptions:
+        d = 0   → point on ground (Y ≈ 0)
+        d = 1   → point at BEV camera height (Y ≈ bev_cam_height)
     """
     d = np.clip(depth_norm, 0.0, 1.0)
 
-    # Chiều cao thực tế (tương đối so với mặt đất Y=0)
+    # Approximate real height relative to ground plane Y=0
     height = (1-d) * float(bev_cam_height) /9
 
-    # Lọc noise: mọi thứ thấp hơn min_height coi như sát mặt đất → 0
+    # Suppress noise: anything below min_height is treated as ground
     height[height < min_height] = 0.0
     return height
 
@@ -164,7 +149,7 @@ def get_3d_bounding_boxes(
             final_h = h_max / 3.0
             color = color
 
-        # ====== Xây cuboid ======
+        # Build cuboid geometry
         corners = cuboid_corners(
             box["obb"],
             (H, W),

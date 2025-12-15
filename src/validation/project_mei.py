@@ -64,6 +64,8 @@ from utils.pipeline import (
     get_3d_bounding_boxes,
 )
 
+# Visualization script to inspect cuboid projections against each camera view.
+
 # Keep logging quiet by default; this script is noisy visually so we only show errors.
 logging.basicConfig(
     level=logging.ERROR,   # <-- only show real errors

@@ -17,6 +17,7 @@ from utils.camera import load_camera_bev_height
 
 DEFAULT_CAMERA_HEIGHT = 40.0
 
+# CLI helper to turn BEV segmentation + depth into 3D bbox JSON annotations.
 
 def export_bboxes_json(cuboids, path: Path):
     """Export 3D bbox annotations to JSON."""

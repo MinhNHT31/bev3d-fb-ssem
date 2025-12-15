@@ -63,6 +63,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("VIDEO_GEN")
 
+# Batch visualizer that tiles camera views, depth, and BEV with projected
+# cuboids into a video for quick qualitative review.
+
 """ ========================================================== """
 """ CLEAN Y-PLANE DRAWER """
 """ ========================================================== """
