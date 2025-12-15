@@ -3,3 +3,5 @@ numpy
 open3d
 PyYAML
 scikit-image
+matplotlib
+tqdm
