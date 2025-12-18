@@ -138,7 +138,7 @@ def get_3d_bounding_boxes(
             color = color
 
         elif h_max >= 2.4:
-            final_h = h_max / 2
+            final_h = h_max / 1.75
             color = color
 
         elif h_max >= 2.3:
@@ -233,8 +233,8 @@ def main():
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
     ap.add_argument("--vis", action="store_true")
-    ap.add_argument("--offset", type=float, default=30)
-    ap.add_argument("--yshift", type=float, default=0)
+    ap.add_argument("--offset", type=float, default=33)
+    ap.add_argument("--yshift", type=float, default=-0.3)
     args = ap.parse_args()
 
     root = Path(args.dataset_root)

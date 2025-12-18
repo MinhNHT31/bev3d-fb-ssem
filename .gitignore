@@ -34,3 +34,6 @@ videos/
 
 #images
 *.png
+
+#weight 
+*.pt

@@ -212,7 +212,7 @@ def main():
     # For each view: read image, optionally flip to match coordinate convention,
     # draw cuboids, draw Y-planes on front, then convert to RGB for plotting.
     for view in ["front", "left", "right", "rear"]:
-        img_path = root / "seg" / view / f"{sample_id}.png"
+        img_path = root / "rgb" / view / f"{sample_id}.png"
         if not img_path.exists():
             # fallback black image for missing views
             processed_images[view] = np.zeros((600,800,3), dtype=np.uint8)
@@ -220,10 +220,10 @@ def main():
 
         img = cv2.imread(str(img_path))
 
-        # # Some datasets may require flipping the front/rear images to align axes.
-        # if view in ["front", "rear"]:
-        #     img = cv2.flip(img, 1)
-        #     img = cv2.flip(img, 0)
+        # # FB-SSEM datasets require flipping the front/rear images to align axes.
+        if view in ["front", "rear"]:
+            img = cv2.flip(img, 1)
+            img = cv2.flip(img, 0)
     
         ext_key = cam_name_map[view]
         if ext_key in extrinsics_dict:
