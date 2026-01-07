@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-MAIN PIPELINE: FB-SSEM BEV VISIBILITY FILTERING (FINAL VERSION)
-==============================================================
+MAIN PIPELINE: FB-SSEM BEV VISIBILITY FILTERING (FINAL – FIXED RGB/BGR)
+=====================================================================
 
 Goal:
     - For every BEV segmentation in FB-SSEM
@@ -68,11 +68,17 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # ============================================================
+# Helper: safe RGB -> BGR write
+# ============================================================
+def imwrite_rgb(path: Path, img_rgb: np.ndarray):
+    cv2.imwrite(str(path), cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
+
+# ============================================================
 # Worker
 # ============================================================
 def process_single_bev(args):
     """
-    Process ONE BEV file → output bev_visible/{id}.png
+    Process ONE BEV file → output seg/bev_visible/{id}.png
     """
     (
         bev_path_str,
@@ -88,9 +94,7 @@ def process_single_bev(args):
 
     bev_path = Path(bev_path_str)
 
-    # Example:
-    # images0/train/seg/bev/123.png
-    # -> root_split = images0/train
+    # imagesX/train/seg/bev/123.png -> imagesX/train
     root_split = bev_path.parents[2]
     sid = bev_path.stem
 
@@ -98,7 +102,7 @@ def process_single_bev(args):
     out_dir.mkdir(exist_ok=True)
 
     # --------------------------------------------------
-    # 1) Load BEV segmentation
+    # 1) Load BEV segmentation (RGB)
     # --------------------------------------------------
     try:
         bev_seg = load_seg(str(bev_path))  # RGB
@@ -112,7 +116,7 @@ def process_single_bev(args):
     # --------------------------------------------------
     obj_masks = segment_objects(bev_seg, min_area=int(min_area))
     if not obj_masks:
-        cv2.imwrite(str(out_dir / f"{sid}.png"), bev_seg)
+        imwrite_rgb(out_dir / f"{sid}.png", bev_seg)
         return f"[OK-empty] {sid}"
 
     # --------------------------------------------------
@@ -141,7 +145,7 @@ def process_single_bev(args):
     )
 
     if not cuboids:
-        cv2.imwrite(str(out_dir / f"{sid}.png"), bev_seg)
+        imwrite_rgb(out_dir / f"{sid}.png", bev_seg)
         return f"[OK-no-cuboids] {sid}"
 
     # --------------------------------------------------
@@ -179,9 +183,9 @@ def process_single_bev(args):
     )
 
     # --------------------------------------------------
-    # 7) Save ONLY bev_visible
+    # 7) Save ONLY bev_visible (RGB -> BGR)
     # --------------------------------------------------
-    cv2.imwrite(str(out_dir / f"{sid}.png"), bev_visible)
+    imwrite_rgb(out_dir / f"{sid}.png", bev_visible)
 
     return f"[OK] {sid}"
 
