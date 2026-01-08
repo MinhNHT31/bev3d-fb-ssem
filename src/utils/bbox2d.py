@@ -44,15 +44,15 @@ def compute_2d_boxes(obj_masks: List[np.ndarray]) -> List[Dict]:
         rect = cv2.minAreaRect(cnt)
         (cx, cy), (w, l), angle = _normalize_rect(rect)
         box_pts = cv2.boxPoints(((cx, cy), (w, l), angle))  # OpenCV returns clockwise
-        x, y, bw, bh = cv2.boundingRect(box_pts.astype(np.int32))
+        # x, y, bw, bh = cv2.boundingRect(box_pts.astype(np.int32))
 
         results.append(
             {
                 "mask": obj.copy(),
-                "aabb": (int(x), int(y), int(bw), int(bh)),
+                # "aabb": (int(x), int(y), int(bw), int(bh)),
                 "obb": {
                     "center": (float(cx), float(cy)),
-                    "size": (float(w)+3, float(l)+3),
+                    "size": (float(w), float(l)),
                     "angle": float(-angle),
                     "corners": box_pts.astype(np.float32),
                 },
@@ -64,8 +64,8 @@ def draw_2d_bboxes(bev_gray: np.ndarray, boxes_2d: List[Dict]) -> np.ndarray:
     """Overlay AABB + OBB on BEV grayscale."""
     vis = cv2.cvtColor((bev_gray * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
     for box in boxes_2d:
-        x, y, w, h = box["aabb"]
-        cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 255), 2)
+        # x, y, w, h = box["aabb"]
+        # cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 255), 2)
         corners = box["obb"]["corners"].astype(np.int32)
         cv2.polylines(vis, [corners], True, (0, 128, 255), 2)
     return vis

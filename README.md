@@ -104,4 +104,4 @@ Intrinsics/extrinsics are loaded once from `CameraCalibrationParameters`.
 
 ## Results
 - Videos from `make_video.py` are stored under `videos/`.
-- Replace this placeholder with your YouTube demo link: **[PLACEHOLDER_YOUTUBE_URL]**
+- Replace this placeholder with your YouTube demo link: **[https://youtu.be/mtobtOk-yd0]**
