@@ -4,31 +4,37 @@
 """
 visi_video.py
 
-Create a composite visualization video with BEV visibility overlay
-and REAL-TIME preview.
+Composite visualization video for FB-SSEM visibility (NEW visibility.py).
 
 Layout:
 --------------------------------------------------
 Row 1:  Left | Front | Right
 Row 2:  VISI | Rear  | BEV
 
-Pipeline:
+Pipeline (per frame):
 --------------------------------------------------
 BEV seg + depth
-    → annotation.py (cuboids)
-    → visibility.py (FAR → NEAR, curved projection)
-    → visualization video
+  -> annotation.py (build cuboids)
+  -> visibility.py (NEW occlusion: NEAR->FAR + union prev, multi-cam any)
+  -> visualize:
+        - draw cuboids on 4 RGB camera images
+            * GREEN = visible (per visibility.py)
+            * RED   = occluded (per visibility.py)
+        - VISI panel: BEV-space mask of visible objects (white)
+        - BEV panel: original BEV seg (correct colors)
 
-Controls (when --show is enabled):
+Controls (when --show enabled):
 --------------------------------------------------
 - ESC or 'q' : stop rendering early
 """
 
 import argparse
+import sys
+from pathlib import Path
+from typing import Dict, Optional
+
 import cv2
 import numpy as np
-from pathlib import Path
-import sys
 from tqdm import tqdm
 
 # ============================================================
@@ -61,25 +67,56 @@ from utils.visibility import compute_visible_bev_and_flags
 # ============================================================
 # Display helpers
 # ============================================================
-def flip_for_display(img, view):
+def flip_for_display(img_bgr: np.ndarray, view: str) -> np.ndarray:
+    """
+    Keep consistent with your project's display convention.
+    (Same as your previous scripts.)
+    """
     if view in ["front", "rear"]:
-        img = cv2.flip(img, 1)
-        img = cv2.flip(img, 0)
-    return img
+        img_bgr = cv2.flip(img_bgr, 1)
+        img_bgr = cv2.flip(img_bgr, 0)
+    return img_bgr
 
 
-def draw_text(img, text):
+def draw_text(img_bgr: np.ndarray, text: str) -> None:
     cv2.putText(
-        img, text, (20, 40),
-        cv2.FONT_HERSHEY_SIMPLEX, 1,
-        (0, 255, 0), 2, cv2.LINE_AA
+        img_bgr,
+        text,
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 255, 0),
+        2,
+        cv2.LINE_AA,
     )
+
+
+# ============================================================
+# Build cuboids list with colors based on visibility
+# ============================================================
+def colorize_cuboids(cuboids, visible_by_id: Dict[int, bool]):
+    """
+    Return a NEW list of cuboids dicts where each cuboid has a color:
+      GREEN (0,1,0) visible
+      RED   (1,0,0) occluded
+    draw_cuboids_curved expects dict keys: "corners", optional "color" (RGB float [0..1])
+    """
+    colored = []
+    for i, cub in enumerate(cuboids):
+        is_vis = bool(visible_by_id.get(i, False))
+        colored.append(
+            {
+                "corners": cub["corners"],
+                "color": (0.0, 1.0, 0.0) if is_vis else (1.0, 0.0, 0.0),
+            }
+        )
+    return colored
 
 
 # ============================================================
 # Process one frame
 # ============================================================
-def process_frame(fid, root, args, K, D, xi, extrinsics, target_size):
+def process_frame(fid: str, root: Path, args, K, D, xi, extrinsics, target_size):
     bev_path = root / "seg" / "bev" / f"{fid}.png"
     depth_path = root / "depth" / f"{fid}.png"
     camcfg_path = root / "cameraconfig" / f"{fid}.txt"
@@ -88,26 +125,29 @@ def process_frame(fid, root, args, K, D, xi, extrinsics, target_size):
         return None
 
     # --------------------------------------------------
-    # BEV → 3D cuboids
+    # 1) BEV seg + depth
     # --------------------------------------------------
-    bev_seg = load_seg(str(bev_path))
-    depth = load_depth(str(depth_path))
+    bev_seg_rgb = load_seg(str(bev_path))          # RGB
+    depth = load_depth(str(depth_path))           # float32 [0..1]
     bev_cam_h = load_camera_bev_height(str(camcfg_path)) if camcfg_path.exists() else None
 
-    obj_masks = segment_objects(bev_seg, min_area=args.min_area)
+    # --------------------------------------------------
+    # 2) BEV -> objects -> cuboids
+    # --------------------------------------------------
+    obj_masks = segment_objects(bev_seg_rgb, min_area=args.min_area)
     boxes_2d = get_2d_bounding_boxes(obj_masks)
     height_map = compute_height_map(depth, bev_cam_h)
 
     cuboids = build_cuboids_from_2d_boxes(
-        boxes_2d,
-        height_map,
+        boxes_2d=boxes_2d,
+        height_map=height_map,
         resolution=args.resolution,
         offset=args.offset,
         yshift=args.yshift,
     )
 
     # --------------------------------------------------
-    # Visibility (CLEAN API)
+    # 3) Visibility (NEW visibility.py) on 4 RGB camera images
     # --------------------------------------------------
     cam_name_map = {
         "front": "Main Camera-front",
@@ -116,27 +156,30 @@ def process_frame(fid, root, args, K, D, xi, extrinsics, target_size):
         "rear":  "Main Camera-rear",
     }
 
-    cam_images = {}
+    cam_images: Dict[str, Optional[np.ndarray]] = {}
     for view in cam_name_map:
         p = root / "rgb" / view / f"{fid}.png"
         cam_images[view] = cv2.imread(str(p)) if p.exists() else None
 
-    _, visible_by_id, _ = compute_visible_bev_and_flags(
-        bev_seg_rgb=bev_seg,
+    # visibility.py returns: (bev_visible_rgb, visible_by_id, best_ratio, maybe None)
+    out = compute_visible_bev_and_flags(
+        bev_seg_rgb=bev_seg_rgb,
         obj_masks=obj_masks,
         cuboids=cuboids,
         cam_images=cam_images,
         extrinsics=extrinsics,
-        K=K,
-        D=D,
-        xi=xi,
+        K=K, D=D, xi=xi,
         cam_name_map=cam_name_map,
         visible_ratio_thresh=args.visible_ratio_thresh,
         min_pixels=args.min_pixels,
     )
+    bev_visible_rgb, visible_by_id, best_ratio = out[:3]
+
+    # Prepare colored cuboids for drawing
+    cuboids_colored = colorize_cuboids(cuboids, visible_by_id)
 
     # --------------------------------------------------
-    # Camera views (with cuboids)
+    # 4) Camera views (draw colored cuboids)
     # --------------------------------------------------
     imgs = {}
     for view, cam_key in cam_name_map.items():
@@ -145,47 +188,52 @@ def process_frame(fid, root, args, K, D, xi, extrinsics, target_size):
         if not img_path.exists():
             img = np.zeros((target_size[1], target_size[0], 3), np.uint8)
         else:
-            img = cv2.imread(str(img_path))
+            img = cv2.imread(str(img_path))  # BGR
             img = flip_for_display(img, view)
 
             ext = extrinsics.get(cam_key)
-            if ext is not None:
-                img = draw_cuboids_curved(img, cuboids, ext, K, D, xi)
+            if ext is not None and len(cuboids_colored) > 0:
+                img = draw_cuboids_curved(img, cuboids_colored, ext, K, D, xi)
 
-            img = flip_for_display(img, view)
+            img = flip_for_display(img, view)  # keep your convention
             img = cv2.resize(img, target_size)
 
         draw_text(img, view.capitalize())
         imgs[view] = img
 
     # --------------------------------------------------
-    # Visibility mask (BEV space)
+    # 5) VISI panel (BEV-space visibility mask)
     # --------------------------------------------------
-    vis_mask = np.zeros(bev_seg.shape[:2], np.uint8)
-    for i, o in enumerate(obj_masks):
+    vis_mask = np.zeros(bev_seg_rgb.shape[:2], np.uint8)
+    n = min(len(obj_masks), len(cuboids))
+    for i in range(n):
         if visible_by_id.get(i, False):
-            vis_mask[o["mask"] > 0] = 255
+            vis_mask[obj_masks[i]["mask"] > 0] = 255
 
     vis_img = cv2.cvtColor(vis_mask, cv2.COLOR_GRAY2BGR)
     vis_img = cv2.resize(vis_img, target_size)
-    draw_text(vis_img, "Visibility")
+    draw_text(vis_img, "Visibility (BEV)")
 
     # --------------------------------------------------
-    # BEV panel
+    # 6) BEV panel (keep correct colors)
+    #    BEV is RGB, OpenCV expects BGR for display
     # --------------------------------------------------
-    bev_viz = cv2.imread(str(bev_path))
-    if bev_viz is None:
-        bev_viz = np.zeros((target_size[1], target_size[0], 3), np.uint8)
+    if args.show_bev_visible:
+        bev_panel_rgb = bev_visible_rgb
+        title = f"BEV Visible (ID: {fid})"
     else:
-        bev_viz = cv2.resize(bev_viz, target_size)
+        bev_panel_rgb = bev_seg_rgb
+        title = f"BEV (ID: {fid})"
 
-    draw_text(bev_viz, f"BEV (ID: {fid})")
+    bev_panel_bgr = cv2.cvtColor(bev_panel_rgb, cv2.COLOR_RGB2BGR)
+    bev_panel_bgr = cv2.resize(bev_panel_bgr, target_size)
+    draw_text(bev_panel_bgr, title)
 
     # --------------------------------------------------
-    # Compose grid
+    # 7) Compose grid
     # --------------------------------------------------
     row1 = cv2.hconcat([imgs["left"], imgs["front"], imgs["right"]])
-    row2 = cv2.hconcat([vis_img, imgs["rear"], bev_viz])
+    row2 = cv2.hconcat([vis_img, imgs["rear"], bev_panel_bgr])
     grid = cv2.vconcat([row1, row2])
 
     return grid
@@ -200,20 +248,21 @@ def main():
     ap.add_argument("--output", default="visibility_video.mp4")
     ap.add_argument("--fps", type=int, default=10)
 
+    # annotation.py params
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=36)
+    ap.add_argument("--offset", type=float, default=36.0)
     ap.add_argument("--yshift", type=float, default=-0.4)
 
-    ap.add_argument("--visible-ratio-thresh", type=float, default=0.33)
-    ap.add_argument("--min-pixels", type=int, default=20)
+    # visibility.py params
+    ap.add_argument("--visible-ratio-thresh", type=float, default=0.15)
+    ap.add_argument("--min-pixels", type=int, default=5)
 
-    # LIVE PREVIEW
-    ap.add_argument(
-        "--show",
-        action="store_true",
-        help="Show video frames in real-time while rendering"
-    )
+    # visualization
+    ap.add_argument("--show", action="store_true", help="Live preview while rendering (ESC/q to stop)")
+    ap.add_argument("--show-bev-visible", action="store_true", help="Show bev_visible instead of original BEV in BEV panel")
+    ap.add_argument("--target-w", type=int, default=640)
+    ap.add_argument("--target-h", type=int, default=480)
 
     args = ap.parse_args()
     root = Path(args.dataset_root)
@@ -224,7 +273,7 @@ def main():
     bev_dir = root / "seg" / "bev"
     bev_files = list(bev_dir.glob("*.png"))
     if not bev_files:
-        print("❌ No BEV frames found")
+        print(f"❌ No BEV frames found in {bev_dir}")
         return
 
     try:
@@ -242,7 +291,7 @@ def main():
     # --------------------------------------------------
     # Video writer
     # --------------------------------------------------
-    target_size = (640, 480)
+    target_size = (args.target_w, args.target_h)
     out_path = Path("videos") / args.output
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -265,9 +314,6 @@ def main():
 
         writer.write(frame)
 
-        # ----------------------------------------------
-        # LIVE PREVIEW
-        # ----------------------------------------------
         if args.show:
             cv2.imshow("Visibility Video (Live)", frame)
             key = cv2.waitKey(1) & 0xFF
@@ -275,7 +321,7 @@ def main():
                 print("\n⏹️ Stopped by user")
                 break
 
-    if writer:
+    if writer is not None:
         writer.release()
         print(f"\n✅ Visibility video saved to {out_path}")
     else:

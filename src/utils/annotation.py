@@ -234,9 +234,6 @@ def cuboid_to_bev_obb(corners: np.ndarray) -> Dict:
         # "yaw_axis": "Y",
     }
 
-
-
-
 def build_bev_3d_annotation(
     cuboids: List[Dict],
     frame_id: int,
