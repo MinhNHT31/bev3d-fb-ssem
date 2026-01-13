@@ -152,8 +152,7 @@ def build_cuboids_from_2d_boxes(
     """
     H, W = height_map.shape
     cuboids: List[Dict] = []
-
-    for i, box in enumerate(boxes_2d):
+    for box in boxes_2d:
         mask_bool = box["mask"].astype(bool)
         vals = height_map[mask_bool]
         h_max = float(vals.max()) if vals.size else 0.0
@@ -177,13 +176,15 @@ def build_cuboids_from_2d_boxes(
             offset=float(offset),
             yshift=float(yshift),
         )
-
+        # Filter out cuboids in the ego car area (near center)
+        if box["obb"]["center"]== (299.0, 299.5):
+            continue
         cuboids.append(
             {
-                "local_id": int(i),
+                "local_id": len(cuboids),
                 "obb_2d": box["obb"],
                 "corners": corners,  # (8,3)
-                "label": box.get("label", 0),
+                "label": box.get("label"),
                 "color": box.get("color", [1.0, 1.0, 0.0]),
                 "h_max": float(h_max),
                 "final_h": float(final_h),

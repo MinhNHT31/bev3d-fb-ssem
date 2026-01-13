@@ -228,7 +228,7 @@ def render_near_to_far_visibility(
     total_px: Dict[int, int] = {}
     visible_px: Dict[int, int] = {}
 
-    for _, lid in pairs:
+    for _, lid in pairs[0:]:
         obj = obj_map[lid]
 
         # --------------------------------------------------
@@ -285,8 +285,8 @@ def visibility_one_camera(
 
     for o in objects:
         lid = o.local_id
-        t = int(total_px.get(lid, 0))
-        v = int(visible_px.get(lid, 0))
+        t = int(total_px.get(lid, -1))
+        v = int(visible_px.get(lid, -1))
         r = float(v / max(t, 1))
 
         ratio_by_id[lid] = r
@@ -354,7 +354,7 @@ def build_runtime_objects(
     for i in range(n):
         corners = np.asarray(cuboids[i]["corners"], dtype=np.float64).reshape(8, 3)
         local_id = int(cuboids[i].get("local_id"))  # IMPORTANT: preserve upstream id if present
-        
+
         objects.append(
             RuntimeObject(
                 local_id=local_id,

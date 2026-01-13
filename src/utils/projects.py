@@ -10,7 +10,7 @@ def cam2image(
     K: np.ndarray,
     D: np.ndarray,
     xi: float,
-    z_epsilon: float = 0.0,
+    z_epsilon: float = 0.1,
     image_size: Tuple[int, int] = (None, None),
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -32,7 +32,6 @@ def cam2image(
         mask (N bool): Visibility mask (point in front of camera & valid).
     """
 
-    # for testing
     N = points.shape[0]
     if N == 0:
         return np.zeros((0, 2)), np.zeros(0, dtype=bool)
