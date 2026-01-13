@@ -161,7 +161,7 @@ def process_frame(fid: str, root: Path, args, K, D, xi, extrinsics, target_size)
         p = root / "rgb" / view / f"{fid}.png"
         cam_images[view] = cv2.imread(str(p)) if p.exists() else None
 
-    # visibility.py returns: (bev_visible_rgb, visible_by_id, best_ratio, maybe None)
+    # visibility.py returns: (bev_visible_rgb, visible_by_id, best_ratio)
     out = compute_visible_bev_and_flags(
         bev_seg_rgb=bev_seg_rgb,
         obj_masks=obj_masks,

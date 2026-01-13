@@ -59,6 +59,7 @@ def ego_distance(center_world: np.ndarray) -> float:
     return float(np.linalg.norm(center_world))
 
 
+
 # ============================================================
 # Projection (CURVED edges for fisheye / MEI)
 # ============================================================
@@ -70,7 +71,7 @@ def project_cuboid_to_mask(
     D: np.ndarray,
     xi: float,
     image_shape: Tuple[int, int],
-    segments: int = 50,
+    segments: int = 200,
     min_valid_points: int = 10,
     debug: bool = False,
 ) -> np.ndarray:
@@ -166,7 +167,7 @@ def project_cuboid_to_mask(
 
 def fisheye_visibility_mask(
     image_shape: Tuple[int, int],
-    radius_ratio: float = 0.9,
+    radius_ratio: float = 1.0,
 ) -> np.ndarray:
     """
     Create fisheye valid visibility mask.
@@ -352,8 +353,8 @@ def build_runtime_objects(
 
     for i in range(n):
         corners = np.asarray(cuboids[i]["corners"], dtype=np.float64).reshape(8, 3)
-        local_id = int(cuboids[i].get("local_id", i))  # IMPORTANT: preserve upstream id if present
-
+        local_id = int(cuboids[i].get("local_id"))  # IMPORTANT: preserve upstream id if present
+        
         objects.append(
             RuntimeObject(
                 local_id=local_id,

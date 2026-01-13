@@ -200,10 +200,10 @@ def main():
         required=True,
         help="FB-SSEM root directory",
     )
-    ap.add_argument("--num-workers", type=int, default=8)
+    ap.add_argument("--num-workers", type=int, default=10)
 
     # Visibility params
-    ap.add_argument("--visible-ratio-thresh", type=float, default=0.33)
+    ap.add_argument("--visible-ratio-thresh", type=float, default=0.15)
     ap.add_argument("--min-pixels", type=int, default=20)
 
     # BEV → 3D params

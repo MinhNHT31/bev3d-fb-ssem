@@ -4,25 +4,14 @@ from typing import Tuple
 
 # Projection utilities for the Unified MEI camera model (fisheye-like).
 
-# Configure logging for quick console debugging
-logger = logging.getLogger("GeometryDebug")
-logger.setLevel(logging.DEBUG)
-
-# Console handler to see debug output immediately
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('[%(levelname)s] %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
 def cam2image(
     points: np.ndarray,
     Extrinsic: np.ndarray,
     K: np.ndarray,
     D: np.ndarray,
     xi: float,
-    z_epsilon: float = 1e-1,
-    image_size: Tuple[int, int] = (800, 600)
+    z_epsilon: float = 0.0,
+    image_size: Tuple[int, int] = (None, None),
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Projects 3D world points into image pixels using the Unified MEI Camera Model.
@@ -43,6 +32,7 @@ def cam2image(
         mask (N bool): Visibility mask (point in front of camera & valid).
     """
 
+    # for testing
     N = points.shape[0]
     if N == 0:
         return np.zeros((0, 2)), np.zeros(0, dtype=bool)

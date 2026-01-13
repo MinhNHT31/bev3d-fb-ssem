@@ -153,7 +153,7 @@ def build_cuboids_from_2d_boxes(
     H, W = height_map.shape
     cuboids: List[Dict] = []
 
-    for box in boxes_2d:
+    for i, box in enumerate(boxes_2d):
         mask_bool = box["mask"].astype(bool)
         vals = height_map[mask_bool]
         h_max = float(vals.max()) if vals.size else 0.0
@@ -180,6 +180,7 @@ def build_cuboids_from_2d_boxes(
 
         cuboids.append(
             {
+                "local_id": int(i),
                 "obb_2d": box["obb"],
                 "corners": corners,  # (8,3)
                 "label": box.get("label", 0),
@@ -244,11 +245,11 @@ def build_bev_3d_annotation(
     """
     objects: List[Dict] = []
 
-    for local_id, c in enumerate(cuboids):
+    for c in cuboids:
         objects.append(
             {
                 "frame": int(frame_id),
-                "local_id": int(local_id),
+                "local_id": int(c.get("local_id")),
                 "label": c.get("color"),  # optional: keep if useful
                 "obb": cuboid_to_bev_obb(c["corners"]),
                 "meta": {
@@ -441,8 +442,8 @@ def parse_args():
     ap.add_argument("--id", required=True, help="Frame id (filename stem)")
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=33.0)
-    ap.add_argument("--yshift", type=float, default=-0.3)
+    ap.add_argument("--offset", type=float, default=36.0)
+    ap.add_argument("--yshift", type=float, default=-0.4)
     ap.add_argument("--vis", action="store_true", help="Visualize annotation in Open3D")
     ap.add_argument("--vis-cam", action="store_true", help="Also visualize camera extrinsics")
     ap.add_argument("--dump-json", action="store_true", help="Print JSON annotation to stdout")

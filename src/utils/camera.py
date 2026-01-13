@@ -66,7 +66,6 @@ def get_extrinsics(config_dict):
     R_view = R_cam.T
 
     # Translation in camera coordinates:
-    # t = -R_view * position_world
     t_view = -R_view @ pos.reshape(3, 1)
 
     # 4×4 extrinsic matrix
