@@ -1,6 +1,8 @@
 import logging
 import numpy as np
-from typing import Tuple
+import cv2
+from typing import Tuple, Dict, Optional
+from pathlib import Path
 
 # Projection utilities for the Unified MEI camera model (fisheye-like).
 
@@ -10,7 +12,6 @@ def cam2image(
     K: np.ndarray,
     D: np.ndarray,
     xi: float,
-    z_epsilon: float = 0.1,
     image_size: Tuple[int, int] = (None, None),
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -46,10 +47,9 @@ def cam2image(
     Y = pts_cam[:, 1]
     Z = pts_cam[:, 2]
 
-    # Only points in front of camera
-    mask = Z > z_epsilon
-    if not np.any(mask):
-        return np.zeros((N, 2)), mask
+    # the fov in 4 camera model is 210 degree, so we use all true mask
+    # mask = np.ones(N, dtype=bool)
+    mask = Z > -1  # Points in front of camera
 
     Xv = X[mask]
     Yv = Y[mask]

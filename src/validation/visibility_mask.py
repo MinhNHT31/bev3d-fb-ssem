@@ -5,24 +5,31 @@
 visibility_mask.py
 ==================
 
-Visualization script for visibility results (NO DEBUG logic inside visibility).
+Validate visibility.py by visualizing *VISIBLE OBJECT MASKS* (NOT BBOX).
 
-Display layout (2 rows):
+Layout (2 rows x 3 cols):
 --------------------------------------------------
-Row 1:  Front RGB | Front Object Mask (color per object) | Front + BBox
-Row 2:  GT BEV    | BEV Visible                          | Visibility Mask
+Row 1:  Left (visible masks overlay) | Front (visible masks overlay) | Right (visible masks overlay)
+Row 2:  VISI (BEV visible mask)      | Rear (visible masks overlay)  | GT BEV
 
-Purpose:
-- Debug fisheye valid region (radius_ratio = 1.0)
-- Verify cuboid projection on FRONT camera
-- Each object has its own color in front mask
+Key requirements:
+- Use visibility.py outputs (visible_by_id) as source of truth.
+- For each visible object:
+    + project cuboid -> image mask (pixel-level)
+    + colorize by local_id (fixed palette by ID)
+- NO fisheye_visibility_mask
+- ONLY camera mask:
+    BLACK (0) = visible
+    WHITE (255) = not visible
+- Respect dataset orientation:
+    front & rear images are flipped (flip 1 then flip 0) in visi_video.py
+    -> We flip before projecting/overlay, then flip back for display.
 """
 
 import argparse
 import sys
 from pathlib import Path
-import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 import cv2
 import numpy as np
@@ -50,68 +57,170 @@ from utils.camera import (
     load_extrinsics,
     load_camera_bev_height,
 )
-from utils.bbox3d import draw_cuboids_curved
 from utils.visibility import (
     compute_visible_bev_and_flags,
-    fisheye_visibility_mask,
     project_cuboid_to_mask,
 )
 
 # ============================================================
-# Logging
+# Palette (BGR for overlay, but we keep deterministic by local_id)
 # ============================================================
-logger = logging.getLogger("visibility_mask")
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-if not logger.handlers:
-    logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
-# ============================================================
-# Color palette (BGR for OpenCV)
-# ============================================================
-PALETTE = [
-    (255, 0, 0),    # blue
-    (0, 255, 0),    # green
-    (0, 0, 255),    # red
-    (255, 255, 0),  # cyan
-    (255, 0, 255),  # magenta
-    (0, 255, 255),  # yellow
-    (128, 0, 255),
-    (255, 128, 0),
-    (0, 128, 255),
+PALETTE_BGR = [
+    (255,   0,   0),  # blue
+    (  0, 255,   0),  # green
+    (  0,   0, 255),  # red
+    (255, 255,   0),  # cyan
+    (255,   0, 255),  # magenta
+    (  0, 255, 255),  # yellow
+    (128,   0, 255),
+    (255, 128,   0),
+    (  0, 128, 255),
 ]
 
-def color_for_id(i: int):
-    return PALETTE[i % len(PALETTE)]
+def color_for_local_id(lid: int) -> Tuple[int, int, int]:
+    return PALETTE_BGR[int(lid) % len(PALETTE_BGR)]
 
 # ============================================================
-# Display helpers
+# Helpers
 # ============================================================
-def prep(img: Optional[np.ndarray], title: str, size: Tuple[int, int] = (512, 512)) -> np.ndarray:
+def flip_if_needed(img: np.ndarray, view: str) -> np.ndarray:
+    """Match visi_video.py convention: front & rear are flipped."""
+    if view in ("front", "rear"):
+        img = cv2.flip(img, 1)
+        img = cv2.flip(img, 0)
+    return img
+
+def unflip_if_needed(img: np.ndarray, view: str) -> np.ndarray:
+    """Inverse is same operation for 180° flip."""
+    if view in ("front", "rear"):
+        img = cv2.flip(img, 1)
+        img = cv2.flip(img, 0)
+    return img
+
+def prep(img: Optional[np.ndarray], title: str, size: Tuple[int, int]) -> np.ndarray:
+    """Resize + title for panel."""
+    W, H = size
     if img is None:
-        out = np.zeros((size[1], size[0], 3), np.uint8)
+        out = np.zeros((H, W, 3), np.uint8)
     else:
-        out = cv2.resize(img, size)
+        out = cv2.resize(img, (W, H), interpolation=cv2.INTER_LINEAR)
 
-    cv2.putText(
-        out,
-        title,
-        (20, 40),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (0, 255, 0),
-        2,
-        cv2.LINE_AA,
-    )
+    cv2.putText(out, title, (15, 35),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
     return out
 
-def flip_front(img: Optional[np.ndarray]) -> Optional[np.ndarray]:
-    if img is None:
-        return None
-    img = cv2.flip(img, 1)
-    img = cv2.flip(img, 0)
-    return img
+def load_camera_mask_bool(view: str, image_shape: Tuple[int, int]) -> np.ndarray:
+    """
+    Load camera mask and convert to boolean visibility region.
+
+    Mask convention:
+        BLACK (0)   = visible
+        WHITE (255) = NOT visible
+
+    Return:
+        cam_vis: (H,W) bool; True means visible region.
+    """
+    H, W = image_shape
+
+    p = PROJECT_ROOT / "masks" / f"{view}.png"
+    if not p.exists():
+        # If missing, treat as fully visible
+        return np.ones((H, W), dtype=bool)
+
+    gray = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        return np.ones((H, W), dtype=bool)
+
+    if gray.shape != (H, W):
+        gray = cv2.resize(gray, (W, H), interpolation=cv2.INTER_NEAREST)
+
+    cam_vis = (gray <= 127)
+    return cam_vis
+
+def overlay_visible_object_masks(
+    img_bgr: np.ndarray,
+    view: str,
+    cuboids: List[Dict],
+    visible_by_id: Dict[int, bool],
+    ext_w2c: np.ndarray,
+    K: np.ndarray,
+    D: np.ndarray,
+    xi: float,
+    alpha: float = 0.55,
+) -> np.ndarray:
+    """
+    Overlay ONLY visible objects as colored pixel masks on the given camera image.
+
+    Steps:
+    - Flip image to match projection coordinate convention for front/rear (as in visi_video.py)
+    - Load & flip camera mask accordingly
+    - For each cuboid:
+        if visible_by_id[local_id] is True:
+            project_cuboid_to_mask -> obj_mask (H,W) bool
+            apply cam_vis_mask
+            paint overlay color (by local_id)
+    - Blend overlay onto image
+    - Unflip back for display
+    """
+    H, W = img_bgr.shape[:2]
+
+    # Flip working image (for front/rear only)
+    work = flip_if_needed(img_bgr.copy(), view)
+
+    # Camera visible region
+    cam_vis = load_camera_mask_bool(view, (H, W))
+    cam_vis = flip_if_needed(cam_vis.astype(np.uint8) * 255, view)
+    cam_vis = (cam_vis <= 127)  # back to bool after flip
+
+    overlay = np.zeros_like(work, dtype=np.uint8)
+
+    for cub in cuboids:
+        lid = int(cub.get("local_id", -1))
+        if lid < 0:
+            continue
+
+        # Only draw visible objects
+        if not visible_by_id.get(lid, False):
+            continue
+
+        obj_mask = project_cuboid_to_mask(
+            np.asarray(cub["corners"], dtype=np.float64),
+            ext_w2c,
+            K, D, xi,
+            (H, W),
+        ).astype(bool)
+
+        # Apply camera visibility region
+        obj_mask &= cam_vis
+
+        if not np.any(obj_mask):
+            continue
+
+        overlay[obj_mask] = color_for_local_id(lid)
+
+    # Blend
+    blended = cv2.addWeighted(work, 1.0, overlay, alpha, 0.0)
+
+    # Unflip for display
+    blended = unflip_if_needed(blended, view)
+    return blended
+
+def build_bev_visibility_mask_panel(obj_masks: List[Dict], visible_by_id: Dict[int, bool], shape_hw: Tuple[int, int]) -> np.ndarray:
+    """
+    BEV-space visibility mask:
+        white where object's BEV mask is visible, else black.
+    """
+    H, W = shape_hw
+    m = np.zeros((H, W), np.uint8)
+    for o in obj_masks:
+        lid = int(o.get("local_id", -1)) if "local_id" in o else None
+        # NOTE: obj_masks from segment_objects might not include local_id;
+        # In your pipeline, visibility_by_id uses RuntimeObject.local_id (from cuboids).
+        # So we should build VISI from cuboids/RuntimeObjects ideally.
+        # However, in your existing validation scripts you used enumerate index.
+        # We'll handle both robustly:
+        pass
+    return cv2.cvtColor(m, cv2.COLOR_GRAY2BGR)
 
 # ============================================================
 # Main
@@ -128,7 +237,9 @@ def main():
 
     ap.add_argument("--visible-ratio-thresh", type=float, default=0.15)
     ap.add_argument("--min-pixels", type=int, default=20)
-    ap.add_argument("--r", default=0.85, type=float)
+
+    ap.add_argument("--panel-size", type=int, default=512)
+    ap.add_argument("--alpha", type=float, default=0.55)
 
     args = ap.parse_args()
     root = Path(args.dataset_root)
@@ -142,10 +253,10 @@ def main():
     cfg = root / "cameraconfig" / f"{fid}.txt"
     bev_cam_h = load_camera_bev_height(str(cfg)) if cfg.exists() else None
 
-    H, W = bev_seg.shape[:2]
+    H_bev, W_bev = bev_seg.shape[:2]
 
     # --------------------------------------------------------
-    # BEV → cuboids
+    # BEV -> objects -> cuboids (same as your pipeline)
     # --------------------------------------------------------
     obj_masks = segment_objects(bev_seg, min_area=args.min_area)
     boxes_2d = get_2d_bounding_boxes(obj_masks)
@@ -172,15 +283,15 @@ def main():
         "rear":  "Main Camera-rear",
     }
 
-    cam_images = {
-        v: cv2.imread(str(root / "rgb" / v / f"{fid}.png"))
-        for v in cam_name_map
-    }
+    cam_images: Dict[str, Optional[np.ndarray]] = {}
+    for view in cam_name_map:
+        p = root / "rgb" / view / f"{fid}.png"
+        cam_images[view] = cv2.imread(str(p)) if p.exists() else None
 
     # --------------------------------------------------------
-    # Visibility
+    # Visibility (source of truth)
     # --------------------------------------------------------
-    bev_visible, visible_by_id, _ = compute_visible_bev_and_flags(
+    bev_visible, visible_by_id, _best_ratio = compute_visible_bev_and_flags(
         bev_seg_rgb=bev_seg,
         obj_masks=obj_masks,
         cuboids=cuboids,
@@ -193,72 +304,60 @@ def main():
     )
 
     # --------------------------------------------------------
-    # FRONT camera masks
+    # Build camera overlays (VISIBLE MASKS per ID)
     # --------------------------------------------------------
-    front_img = cam_images["front"]
-
-    Hf, Wf = front_img.shape[:2]
-    fish_mask = fisheye_visibility_mask((Hf, Wf), radius_ratio=args.r)
-    front_mask_color = np.zeros((Hf, Wf, 3), np.uint8)
-
-    ext = extrinsics[cam_name_map["front"]]
-
-    for i, cub in enumerate(cuboids):
-        obj_mask = project_cuboid_to_mask(
-            cub["corners"], ext, K, D, xi, (Hf, Wf)
-        )
-        obj_mask &= fish_mask
-
-        color = color_for_id(i)
-        front_mask_color[obj_mask] = color
-
-    front_mask_color = flip_front(front_mask_color)
-
-    # --------------------------------------------------------
-    # Front + BBox
-    # --------------------------------------------------------
-    colored = []
-    for i, cub in enumerate(cuboids):
-        if i == 0:
+    rendered = {}
+    for view, cam_key in cam_name_map.items():
+        img = cam_images.get(view)
+        if img is None:
+            rendered[view] = None
             continue
-        colored.append({
-            "corners": cub["corners"],
-            "color": tuple(c / 255.0 for c in color_for_id(i)),
-        })
 
-    front_bbox = draw_cuboids_curved(flip_front(front_img.copy()), colored, ext, K, D, xi)
-    # front_bbox = flip_front(front_bbox)
-
-    # --------------------------------------------------------
-    # BEV views
-    # --------------------------------------------------------
-    bev_gt = cv2.cvtColor(bev_seg, cv2.COLOR_RGB2BGR)
-    bev_vis = cv2.cvtColor(bev_visible, cv2.COLOR_RGB2BGR)
-
-    vis_mask = np.zeros((H, W), np.uint8)
-    for i, o in enumerate(obj_masks):
-        if visible_by_id.get(i, False):
-            vis_mask[o["mask"] > 0] = 255
-    vis_mask = cv2.cvtColor(vis_mask, cv2.COLOR_GRAY2BGR)
+        ext = extrinsics[cam_key]
+        rendered[view] = overlay_visible_object_masks(
+            img_bgr=img,
+            view=view,
+            cuboids=cuboids,
+            visible_by_id=visible_by_id,
+            ext_w2c=ext,
+            K=K, D=D, xi=xi,
+            alpha=float(args.alpha),
+        )
 
     # --------------------------------------------------------
-    # Compose
+    # Build VISI BEV-space mask (from bev_visible vs background)
+    # Here we show bev_visible as-is; plus a binary VISI mask panel for clarity.
     # --------------------------------------------------------
-    size = (512, 512)
+    bev_gt_bgr = cv2.cvtColor(bev_seg, cv2.COLOR_RGB2BGR)
+    bev_vis_bgr = cv2.cvtColor(bev_visible, cv2.COLOR_RGB2BGR)
+
+    # Binary mask: where bev_visible differs from background(0,0,0)
+    vis_bin = (np.any(bev_vis_bgr != 0, axis=2)).astype(np.uint8) * 255
+    vis_bin_bgr = cv2.cvtColor(vis_bin, cv2.COLOR_GRAY2BGR)
+
+    # --------------------------------------------------------
+    # Compose 2x3
+    # Row1: Left | Front | Right
+    # Row2: VISI | Rear | GT
+    # --------------------------------------------------------
+    S = int(args.panel_size)
+    size = (S, S)
+
     row1 = cv2.hconcat([
-        prep(front_img, "Front RGB", size),
-        prep(front_mask_color, f"Mask r={args.r}", size),
-        prep(flip_front(front_bbox), "Front + BBox", size),
+        prep(rendered.get("left"),  "Left (visible masks)",  size),
+        prep(rendered.get("front"), "Front (visible masks)", size),
+        prep(rendered.get("right"), "Right (visible masks)", size),
     ])
+
     row2 = cv2.hconcat([
-        prep(bev_gt, "GT BEV", size),
-        prep(bev_vis, "BEV Visible", size),
-        prep(vis_mask, "Visibility Mask", size),
+        prep(vis_bin_bgr,           "VISI (binary)",         size),
+        prep(rendered.get("rear"),  "Rear (visible masks)",  size),
+        prep(bev_gt_bgr,            "GT BEV",                size),
     ])
 
     grid = cv2.vconcat([row1, row2])
 
-    cv2.imshow("Visibility Debug", grid)
+    cv2.imshow("Visibility Mask Validate (4 cams)", grid)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 

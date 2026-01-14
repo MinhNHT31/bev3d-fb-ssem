@@ -38,3 +38,5 @@ videos/
 
 #weight 
 *.pt
+# code
+mask_maker.py

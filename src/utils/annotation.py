@@ -39,7 +39,7 @@ import open3d as o3d
 
 # External utilities (existing in your repo)
 from .bbox2d import compute_2d_boxes
-from .bbox3d import cuboid_corners
+from .bbox3d import cuboid_corners, shift2axle
 from .camera import load_camera_bev_height, load_extrinsics
 
 np.set_printoptions(precision=3, suppress=True)
@@ -177,12 +177,10 @@ def build_cuboids_from_2d_boxes(
             yshift=float(yshift),
         )
         # Filter out cuboids in the ego car area (near center)
-        if box["obb"]["center"]== (299.0, 299.5):
-            continue
+       
         cuboids.append(
             {
                 "local_id": len(cuboids),
-                "obb_2d": box["obb"],
                 "corners": corners,  # (8,3)
                 "label": box.get("label"),
                 "color": box.get("color", [1.0, 1.0, 0.0]),

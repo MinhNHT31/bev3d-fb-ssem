@@ -162,7 +162,7 @@ def process_frame(fid: str, root: Path, args, K, D, xi, extrinsics, target_size)
         cam_images[view] = cv2.imread(str(p)) if p.exists() else None
 
     # visibility.py returns: (bev_visible_rgb, visible_by_id, best_ratio)
-    out = compute_visible_bev_and_flags(
+    bev_visible_rgb, visible_by_id, best_ratio = compute_visible_bev_and_flags(
         bev_seg_rgb=bev_seg_rgb,
         obj_masks=obj_masks,
         cuboids=cuboids,
@@ -173,7 +173,6 @@ def process_frame(fid: str, root: Path, args, K, D, xi, extrinsics, target_size)
         visible_ratio_thresh=args.visible_ratio_thresh,
         min_pixels=args.min_pixels,
     )
-    bev_visible_rgb, visible_by_id, best_ratio = out[:3]
 
     # Prepare colored cuboids for drawing
     cuboids_colored = colorize_cuboids(cuboids, visible_by_id)
@@ -250,12 +249,12 @@ def main():
 
     # annotation.py params
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
-    ap.add_argument("--min-area", type=int, default=50)
+    ap.add_argument("--min-area", type=int, default=20)
     ap.add_argument("--offset", type=float, default=36.0)
     ap.add_argument("--yshift", type=float, default=-0.4)
 
     # visibility.py params
-    ap.add_argument("--visible-ratio-thresh", type=float, default=0.15)
+    ap.add_argument("--visible-ratio-thresh", type=float, default=0.05)
     ap.add_argument("--min-pixels", type=int, default=5)
 
     # visualization
