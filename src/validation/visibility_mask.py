@@ -134,7 +134,7 @@ def load_camera_mask_bool(view: str, image_shape: Tuple[int, int]) -> np.ndarray
     if gray.shape != (H, W):
         gray = cv2.resize(gray, (W, H), interpolation=cv2.INTER_NEAREST)
 
-    cam_vis = (gray <= 127)
+    cam_vis = (gray >=127)
     return cam_vis
 
 def overlay_visible_object_masks(
@@ -232,10 +232,10 @@ def main():
 
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=36.0)
-    ap.add_argument("--yshift", type=float, default=-0.4)
+    ap.add_argument("--offset", type=float, default=33.0)
+    ap.add_argument("--yshift", type=float, default=-0.337)
 
-    ap.add_argument("--visible-ratio-thresh", type=float, default=0.15)
+    ap.add_argument("--visible-ratio-thresh", type=float, default=0.01)
     ap.add_argument("--min-pixels", type=int, default=20)
 
     ap.add_argument("--panel-size", type=int, default=512)

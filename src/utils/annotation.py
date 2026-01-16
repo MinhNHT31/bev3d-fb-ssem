@@ -144,7 +144,7 @@ def build_cuboids_from_2d_boxes(
     height_map: np.ndarray,
     resolution: float,
     offset: float = 33.0,
-    yshift: float = -0.3,
+    yshift: float = -0.337,
 ) -> List[Dict]:
     """
     Build cuboid corners for each 2D OBB, using height_map statistics inside mask.

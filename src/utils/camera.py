@@ -77,7 +77,7 @@ def get_extrinsics(config_dict):
     return Extrinsic
 
 def unity2opencv(Extrinsic_unity):
-    T = np.diag([1,-1,1,1])
+    T = np.diag([1, -1, 1, 1])
     Extrinsic_cv = T @ Extrinsic_unity
     return Extrinsic_cv
 

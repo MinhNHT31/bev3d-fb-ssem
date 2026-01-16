@@ -250,8 +250,8 @@ def main():
     # annotation.py params
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=20)
-    ap.add_argument("--offset", type=float, default=36.0)
-    ap.add_argument("--yshift", type=float, default=-0.4)
+    ap.add_argument("--offset", type=float, default=33.0)
+    ap.add_argument("--yshift", type=float, default=-0.337)
 
     # visibility.py params
     ap.add_argument("--visible-ratio-thresh", type=float, default=0.05)

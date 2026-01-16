@@ -49,7 +49,7 @@ def cam2image(
 
     # the fov in 4 camera model is 210 degree, so we use all true mask
     # mask = np.ones(N, dtype=bool)
-    mask = Z > -1  # Points in front of camera
+    mask = Z > -2  # Points in front of camera
 
     Xv = X[mask]
     Yv = Y[mask]
