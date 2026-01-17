@@ -109,34 +109,6 @@ def prep(img: Optional[np.ndarray], title: str, size: Tuple[int, int]) -> np.nda
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
     return out
 
-def load_camera_mask_bool(view: str, image_shape: Tuple[int, int]) -> np.ndarray:
-    """
-    Load camera mask and convert to boolean visibility region.
-
-    Mask convention:
-        BLACK (0)   = visible
-        WHITE (255) = NOT visible
-
-    Return:
-        cam_vis: (H,W) bool; True means visible region.
-    """
-    H, W = image_shape
-
-    p = PROJECT_ROOT / "masks" / f"{view}.png"
-    if not p.exists():
-        # If missing, treat as fully visible
-        return np.ones((H, W), dtype=bool)
-
-    gray = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
-    if gray is None:
-        return np.ones((H, W), dtype=bool)
-
-    if gray.shape != (H, W):
-        gray = cv2.resize(gray, (W, H), interpolation=cv2.INTER_NEAREST)
-
-    cam_vis = (gray >=127)
-    return cam_vis
-
 def overlay_visible_object_masks(
     img_bgr: np.ndarray,
     view: str,
@@ -167,11 +139,6 @@ def overlay_visible_object_masks(
     # Flip working image (for front/rear only)
     work = flip_if_needed(img_bgr.copy(), view)
 
-    # Camera visible region
-    cam_vis = load_camera_mask_bool(view, (H, W))
-    cam_vis = flip_if_needed(cam_vis.astype(np.uint8) * 255, view)
-    cam_vis = (cam_vis <= 127)  # back to bool after flip
-
     overlay = np.zeros_like(work, dtype=np.uint8)
 
     for cub in cuboids:
@@ -191,7 +158,7 @@ def overlay_visible_object_masks(
         ).astype(bool)
 
         # Apply camera visibility region
-        obj_mask &= cam_vis
+        # obj_mask &= cam_vis
 
         if not np.any(obj_mask):
             continue
@@ -213,7 +180,7 @@ def build_bev_visibility_mask_panel(obj_masks: List[Dict], visible_by_id: Dict[i
     H, W = shape_hw
     m = np.zeros((H, W), np.uint8)
     for o in obj_masks:
-        lid = int(o.get("local_id", -1)) if "local_id" in o else None
+        lid = int(o.get("local_id")) if "local_id" in o else None
         # NOTE: obj_masks from segment_objects might not include local_id;
         # In your pipeline, visibility_by_id uses RuntimeObject.local_id (from cuboids).
         # So we should build VISI from cuboids/RuntimeObjects ideally.
@@ -233,7 +200,7 @@ def main():
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
     ap.add_argument("--offset", type=float, default=33.0)
-    ap.add_argument("--yshift", type=float, default=-0.337)
+    ap.add_argument("--yshift", type=float, default=-0.377)
 
     ap.add_argument("--visible-ratio-thresh", type=float, default=0.01)
     ap.add_argument("--min-pixels", type=int, default=20)

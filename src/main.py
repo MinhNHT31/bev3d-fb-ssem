@@ -203,14 +203,14 @@ def main():
     ap.add_argument("--num-workers", type=int, default=10)
 
     # Visibility params
-    ap.add_argument("--visible-ratio-thresh", type=float, default=0.15)
+    ap.add_argument("--visible-ratio-thresh", type=float, default=0.01)
     ap.add_argument("--min-pixels", type=int, default=20)
 
     # BEV → 3D params
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=36.0)
-    ap.add_argument("--yshift", type=float, default=-0.4)
+    ap.add_argument("--offset", type=float, default=33)
+    ap.add_argument("--yshift", type=float, default=-0.377)
 
     args = ap.parse_args()
     dataset_root = Path(args.dataset_root)

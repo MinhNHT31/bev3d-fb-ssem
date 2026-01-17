@@ -96,8 +96,8 @@ def load_camera_visibility_mask(
         gray = cv2.resize(gray, (W, H), interpolation=cv2.INTER_NEAREST)
 
     # BLACK = visible
-    cam_vis = (gray <= 127)
-    return cam_vis
+    cam_vis = (gray >= 127)
+    return cam_vis.astype(bool)
 
 
 def _ensure_unique_ego_id(objects: List[RuntimeObject], ego_old_id: int, ego_id: int = 100) -> None:
@@ -154,6 +154,7 @@ def project_cuboid_to_mask(
     segments: int = 200,
     min_valid_points: int = 10,
     debug: bool = False,
+    vis_mask: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Project a 3D cuboid into image-space binary mask using curved edges.
@@ -163,6 +164,7 @@ def project_cuboid_to_mask(
     """
     H, W = image_shape
     mask_u8 = np.zeros((H, W), dtype=np.uint8)
+    # print(vis_mask)
 
     EDGES = [
         (0, 1), (1, 2), (2, 3), (3, 0),
@@ -222,8 +224,16 @@ def project_cuboid_to_mask(
         cv2.imshow("DEBUG project_cuboid_to_mask", dbg)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+    obj_mask = mask_u8.astype(bool)
 
-    return mask_u8.astype(bool)
+    if vis_mask is None:
+        return obj_mask
+
+    vis_mask_bool = np.asarray(vis_mask, dtype=bool)
+    if vis_mask_bool.shape != (H, W):
+        raise ValueError(f"vis_mask shape {vis_mask_bool.shape} != {(H, W)}")
+
+    return obj_mask | vis_mask_bool
 
 
 # ============================================================
@@ -237,7 +247,7 @@ def render_near_to_far_visibility(
     D: np.ndarray,
     xi: float,
     image_shape: Tuple[int, int],
-    cam_vis_mask: Optional[np.ndarray] = None,   # True=visible pixels
+    cam_vis_mask: Optional[np.ndarray],   # True=visible pixels
     ego_id: int = 100,
 ) -> Tuple[Dict[int, int], Dict[int, int], List[RuntimeObject]]:
     """
@@ -278,14 +288,12 @@ def render_near_to_far_visibility(
     # Build object map
     obj_map = {o.local_id: o for o in objects}
 
-    # Visibility region from camera mask
+    # Visibility region from camera mask (None -> all visible)
     if cam_vis_mask is None:
-        final_vis = np.ones((H, W), dtype=bool)
-    else:
-        if cam_vis_mask.shape != (H, W):
-            raise ValueError(f"cam_vis_mask shape {cam_vis_mask.shape} != {(H, W)}")
-        final_vis = cam_vis_mask.astype(bool)
-
+        cam_vis_mask = np.ones((H, W), dtype=bool)
+    elif cam_vis_mask.shape != (H, W):
+        raise ValueError(f"cam_vis_mask shape {cam_vis_mask.shape} != {(H, W)}")
+    
     union_prev = np.zeros((H, W), dtype=bool)
     total_px: Dict[int, int] = {}
     visible_px: Dict[int, int] = {}
@@ -304,11 +312,10 @@ def render_near_to_far_visibility(
             extrinsic_w2c,
             K, D, xi,
             image_shape,
+            vis_mask= cam_vis_mask
         )
-
+        print(obj_mask)
         # Restrict to camera-visible pixels
-        obj_mask &= final_vis
-
         if not np.any(obj_mask):
             total_px[lid] = 0
             visible_px[lid] = 0
@@ -334,7 +341,7 @@ def visibility_one_camera(
     image_shape: Tuple[int, int],
     visible_ratio_thresh: float,
     min_pixels: int,
-    cam_vis_mask: Optional[np.ndarray] = None,
+    cam_vis_mask: bool,
     ego_id: int = 100,
 ) -> Tuple[Dict[int, bool], Dict[int, float], List[RuntimeObject]]:
     """
@@ -414,8 +421,9 @@ def visibility_multi_camera_any(
 
         H, W = img.shape[:2]
         cam_vis = load_camera_visibility_mask(view, (H, W))
-        if cam_vis is None:
-            cam_vis = np.ones((H, W), dtype=bool)
+        # print(cam_vis)
+        # if cam_vis is None:
+        #     cam_vis = np.ones((H, W), dtype=bool)
 
         vis_cam, ratio_cam, new_objects = visibility_one_camera(
             objects,
