@@ -91,7 +91,7 @@ def unity2opencv(Extrinsic_unity):
     R_u, t_u = Extrinsic_unity  # R: 3x3, t: 3x1
 
     # Axis conversion matrix (Unity → OpenCV)
-    C1 = np.diag([1, 1, 1])
+    # C1 = np.diag([-1, 1, -1])
     C2 = np.diag([1, -1, 1])
 
     # Convert rotation and translation

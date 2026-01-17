@@ -60,6 +60,7 @@ from utils.camera import (
 from utils.visibility import (
     compute_visible_bev_and_flags,
     project_cuboid_to_mask,
+    load_camera_visibility_mask
 )
 
 # ============================================================
@@ -139,6 +140,8 @@ def overlay_visible_object_masks(
     # Flip working image (for front/rear only)
     work = flip_if_needed(img_bgr.copy(), view)
 
+    mask = load_camera_visibility_mask(view=view,image_shape=(H,W))
+
     overlay = np.zeros_like(work, dtype=np.uint8)
 
     for cub in cuboids:
@@ -156,7 +159,7 @@ def overlay_visible_object_masks(
             K, D, xi,
             (H, W),
         ).astype(bool)
-
+        obj_mask = obj_mask & mask
         # Apply camera visibility region
         # obj_mask &= cam_vis
 

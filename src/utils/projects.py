@@ -1,6 +1,5 @@
-import logging
+
 import numpy as np
-import cv2
 from typing import Tuple, Dict, Optional
 from pathlib import Path
 
@@ -12,7 +11,6 @@ def cam2image(
     K: np.ndarray,
     D: np.ndarray,
     xi: float,
-    image_size: Tuple[int, int] = (None, None),
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Projects 3D world points into image pixels using the Unified MEI Camera Model.
@@ -49,7 +47,8 @@ def cam2image(
 
     # the fov in 4 camera model is 210 degree, so we use all true mask
     # mask = np.ones(N, dtype=bool)
-    mask = Z > -2  # Points in front of camera
+    mask = Z > -3  # Points in front of camera
+    
 
     Xv = X[mask]
     Yv = Y[mask]
@@ -94,5 +93,5 @@ def cam2image(
     uv = np.zeros((N, 2), dtype=float)
     uv[mask, 0] = u
     uv[mask, 1] = v
-
     return uv, mask
+

@@ -96,7 +96,7 @@ def load_camera_visibility_mask(
         gray = cv2.resize(gray, (W, H), interpolation=cv2.INTER_NEAREST)
 
     # BLACK = visible
-    cam_vis = (gray >= 127)
+    cam_vis = (gray == 255)
     return cam_vis.astype(bool)
 
 
@@ -153,7 +153,6 @@ def project_cuboid_to_mask(
     image_shape: Tuple[int, int],
     segments: int = 200,
     min_valid_points: int = 10,
-    debug: bool = False,
     vis_mask: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
@@ -183,8 +182,7 @@ def project_cuboid_to_mask(
         uv, valid = cam2image(
             pts3d,
             extrinsic_w2c,
-            K, D, xi,
-            image_size=(W, H),
+            K, D, xi
         )
 
         if valid is None or not np.any(valid):
@@ -211,30 +209,12 @@ def project_cuboid_to_mask(
     hull = cv2.convexHull(pts2d_i.reshape(-1, 1, 2))
     cv2.fillConvexPoly(mask_u8, hull, 1)
 
-    if debug:
-        dbg = np.zeros((H, W, 3), dtype=np.uint8)
-        for p in pts2d_i:
-            cv2.circle(dbg, (int(p[0]), int(p[1])), 1, (255, 0, 0), -1)
-        cv2.polylines(dbg, [hull], True, (0, 255, 0), 2)
-
-        red = np.zeros_like(dbg)
-        red[:, :, 2] = mask_u8 * 255
-        dbg = cv2.addWeighted(dbg, 1.0, red, 0.35, 0)
-
-        cv2.imshow("DEBUG project_cuboid_to_mask", dbg)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
     obj_mask = mask_u8.astype(bool)
 
-    if vis_mask is None:
-        return obj_mask
+    if vis_mask is not None:
+        obj_mask = obj_mask & vis_mask
 
-    vis_mask_bool = np.asarray(vis_mask, dtype=bool)
-    if vis_mask_bool.shape != (H, W):
-        raise ValueError(f"vis_mask shape {vis_mask_bool.shape} != {(H, W)}")
-
-    return obj_mask | vis_mask_bool
-
+    return obj_mask
 
 # ============================================================
 # Core NEAR → FAR visibility (one camera)
@@ -314,7 +294,7 @@ def render_near_to_far_visibility(
             image_shape,
             vis_mask= cam_vis_mask
         )
-        print(obj_mask)
+        # print(obj_mask)
         # Restrict to camera-visible pixels
         if not np.any(obj_mask):
             total_px[lid] = 0
