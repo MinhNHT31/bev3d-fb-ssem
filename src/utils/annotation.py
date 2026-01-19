@@ -166,7 +166,6 @@ def build_cuboids_from_2d_boxes(
             final_h = h_max / 2.0
         else:
             final_h = h_max / 1.75
-
         corners = cuboid_corners(
             box["obb"],
             (H, W),
@@ -188,8 +187,9 @@ def build_cuboids_from_2d_boxes(
                 "final_h": float(final_h),
             }
         )
+    
 
-    return cuboids
+    return cuboids 
 
 
 # ============================================================

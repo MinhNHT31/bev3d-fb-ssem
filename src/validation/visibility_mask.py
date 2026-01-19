@@ -140,7 +140,7 @@ def overlay_visible_object_masks(
     # Flip working image (for front/rear only)
     work = flip_if_needed(img_bgr.copy(), view)
 
-    mask = load_camera_visibility_mask(view=view,image_shape=(H,W))
+    mask = load_camera_visibility_mask(view=view)
 
     overlay = np.zeros_like(work, dtype=np.uint8)
 
@@ -242,7 +242,7 @@ def main():
     # --------------------------------------------------------
     # Camera params
     # --------------------------------------------------------
-    calib_root = root.parents[1] / "CameraCalibrationParameters"
+    calib_root = root.parents[1] 
     K, D, xi = load_intrinsics(calib_root / "camera_intrinsics.yml")
     extrinsics = load_extrinsics(calib_root / "camera_positions_for_extrinsics.txt")
 

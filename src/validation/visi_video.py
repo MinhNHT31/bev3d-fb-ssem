@@ -245,13 +245,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-root", required=True)
     ap.add_argument("--output", default="visibility_video.mp4")
-    ap.add_argument("--fps", type=int, default=10)
+    ap.add_argument("--fps", type=int, default=5)
 
     # annotation.py params
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=20)
     ap.add_argument("--offset", type=float, default=33.0)
-    ap.add_argument("--yshift", type=float, default=-0.337)
+    ap.add_argument("--yshift", type=float, default=-0.377)
 
     # visibility.py params
     ap.add_argument("--visible-ratio-thresh", type=float, default=0.05)
@@ -283,7 +283,7 @@ def main():
     # --------------------------------------------------
     # Camera parameters
     # --------------------------------------------------
-    calib_root = root.parents[1] / "CameraCalibrationParameters"
+    calib_root = root.parents[1]
     K, D, xi = load_intrinsics(calib_root / "camera_intrinsics.yml")
     extrinsics = load_extrinsics(calib_root / "camera_positions_for_extrinsics.txt")
 

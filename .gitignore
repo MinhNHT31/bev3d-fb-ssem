@@ -40,3 +40,5 @@ videos/
 *.pt
 # code
 mask_maker.py
+# Jupyter
+masks/test.ipynb

@@ -6,6 +6,27 @@ from typing import Dict
 
 # Camera helpers convert Unity-style calibration files into OpenCV-friendly
 # intrinsics/extrinsics for the projection utilities.
+def _project_root() -> Path:
+    """
+    Repo layout assumption:
+        <root>/src/utils/visibility.py  -> parents[2] is <root>
+    """
+    return Path(__file__).resolve().parents[2]
+
+
+def load_camera_visibility_mask(view):    
+    root = _project_root()
+    view = view
+    mask_dir = root / "masks" / "forward_looking_camera_model" / "masks"
+    p = mask_dir / f"{view}.npy"
+
+    if not p.exists():
+        return None
+
+    cam_vis = np.load(p)
+
+    return cam_vis.astype(bool)
+
 
 
 # ============================================================
