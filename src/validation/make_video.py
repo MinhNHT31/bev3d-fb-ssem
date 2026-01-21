@@ -159,7 +159,7 @@ def main():
     ap.add_argument("--resolution", type=float, default=100/(6*400))
     ap.add_argument("--min-area", type=int, default=50)
     ap.add_argument("--offset", type=float, default=33)
-    ap.add_argument("--yshift", type=float, default=-0.3)
+    ap.add_argument("--yshift", type=float, default=-0.377)
     args = ap.parse_args()
 
     root = Path(args.dataset_root)
@@ -173,7 +173,7 @@ def main():
         return
 
     # ---------- Calibration ----------
-    calib_root = root.parents[1] / "CameraCalibrationParameters"
+    calib_root = root.parents[1]
     K, D, xi = load_intrinsics(calib_root / "camera_intrinsics.yml")
     extrinsics = load_extrinsics(calib_root / "camera_positions_for_extrinsics.txt")
 
