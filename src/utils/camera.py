@@ -6,6 +6,27 @@ from typing import Dict
 
 # Camera helpers convert Unity-style calibration files into OpenCV-friendly
 # intrinsics/extrinsics for the projection utilities.
+def _project_root() -> Path:
+    """
+    Repo layout assumption:
+        <root>/src/utils/visibility.py  -> parents[2] is <root>
+    """
+    return Path(__file__).resolve().parents[2]
+
+
+def load_camera_visibility_mask(view):    
+    root = _project_root()
+    view = view
+    mask_dir = root / "masks" / "forward_looking_camera_model" / "masks"
+    p = mask_dir / f"{view}.npy"
+
+    if not p.exists():
+        return None
+
+    cam_vis = np.load(p)
+
+    return cam_vis.astype(bool)
+
 
 
 # ============================================================
@@ -66,21 +87,45 @@ def get_extrinsics(config_dict):
     R_view = R_cam.T
 
     # Translation in camera coordinates:
-    # t = -R_view * position_world
     t_view = -R_view @ pos.reshape(3, 1)
 
-    # 4×4 extrinsic matrix
-    View_Matrix = np.eye(4)
-    View_Matrix[:3, :3] = R_view
-    View_Matrix[:3, 3] = t_view.flatten()
+    # # 4×4 extrinsic matrix
+    # View_Matrix = np.eye(4)
+    # View_Matrix[:3, :3] = R_view
+    # View_Matrix[:3, 3] = t_view.flatten()
 
-    Extrinsic = View_Matrix
+
+    # Extrinsic = View_Matrix
+    Extrinsic = R_view, t_view
     return Extrinsic
 
+# def unity2opencv(Extrinsic_unity):
+#     T = np.diag([1, -1, 1, 1])
+#     Extrinsic_cv = T @ Extrinsic_unity
+#     return Extrinsic_cv
+
 def unity2opencv(Extrinsic_unity):
-    T = np.diag([1,-1,1,1])
-    Extrinsic_cv = T @ Extrinsic_unity
+    """
+    Convert Unity-style extrinsic (R, t) to OpenCV convention.
+    """
+
+    R_u, t_u = Extrinsic_unity  # R: 3x3, t: 3x1
+
+    # Axis conversion matrix (Unity → OpenCV)
+    # C1 = np.diag([-1, 1, -1])
+    C2 = np.diag([1, -1, 1])
+
+    # Convert rotation and translation
+    R_cv = C2 @ R_u
+    t_cv = C2 @ t_u
+
+    # Build 4x4 extrinsic
+    Extrinsic_cv = np.eye(4)
+    Extrinsic_cv[:3, :3] = R_cv
+    Extrinsic_cv[:3, 3] = t_cv.flatten()
+
     return Extrinsic_cv
+
 
 # ============================================================
 # Load Extrinsics for All Cameras from CSV File

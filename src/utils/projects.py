@@ -1,19 +1,9 @@
-import logging
+
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Dict, Optional
+from pathlib import Path
 
 # Projection utilities for the Unified MEI camera model (fisheye-like).
-
-# Configure logging for quick console debugging
-logger = logging.getLogger("GeometryDebug")
-logger.setLevel(logging.DEBUG)
-
-# Console handler to see debug output immediately
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('[%(levelname)s] %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
 
 def cam2image(
     points: np.ndarray,
@@ -21,8 +11,6 @@ def cam2image(
     K: np.ndarray,
     D: np.ndarray,
     xi: float,
-    z_epsilon: float = 1e-1,
-    image_size: Tuple[int, int] = (800, 600)
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Projects 3D world points into image pixels using the Unified MEI Camera Model.
@@ -57,10 +45,10 @@ def cam2image(
     Y = pts_cam[:, 1]
     Z = pts_cam[:, 2]
 
-    # Only points in front of camera
-    mask = Z > z_epsilon
-    if not np.any(mask):
-        return np.zeros((N, 2)), mask
+    # the fov in 4 camera model is 210 degree, so we use all true mask
+    mask = np.ones(N, dtype=bool)
+    # mask = Z > -2  # Points in front of camera debug
+    
 
     Xv = X[mask]
     Yv = Y[mask]
@@ -105,5 +93,5 @@ def cam2image(
     uv = np.zeros((N, 2), dtype=float)
     uv[mask, 0] = u
     uv[mask, 1] = v
-
     return uv, mask
+

@@ -42,8 +42,8 @@ def cuboid_corners(
     resolution: float,
     min_height: float,
     max_height: float,
-    offset: float = 1.45,
-    yshift: float = -0.3
+    offset: float = 36,
+    yshift: float = -0.4
 ) -> np.ndarray:
 
     obb_shifted = shift2axle(obb, image_shape, resolution, offset)

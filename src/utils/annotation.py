@@ -39,7 +39,7 @@ import open3d as o3d
 
 # External utilities (existing in your repo)
 from .bbox2d import compute_2d_boxes
-from .bbox3d import cuboid_corners
+from .bbox3d import cuboid_corners, shift2axle
 from .camera import load_camera_bev_height, load_extrinsics
 
 np.set_printoptions(precision=3, suppress=True)
@@ -144,7 +144,7 @@ def build_cuboids_from_2d_boxes(
     height_map: np.ndarray,
     resolution: float,
     offset: float = 33.0,
-    yshift: float = -0.3,
+    yshift: float = -0.337,
 ) -> List[Dict]:
     """
     Build cuboid corners for each 2D OBB, using height_map statistics inside mask.
@@ -152,7 +152,6 @@ def build_cuboids_from_2d_boxes(
     """
     H, W = height_map.shape
     cuboids: List[Dict] = []
-
     for box in boxes_2d:
         mask_bool = box["mask"].astype(bool)
         vals = height_map[mask_bool]
@@ -167,7 +166,6 @@ def build_cuboids_from_2d_boxes(
             final_h = h_max / 2.0
         else:
             final_h = h_max / 1.75
-
         corners = cuboid_corners(
             box["obb"],
             (H, W),
@@ -177,19 +175,21 @@ def build_cuboids_from_2d_boxes(
             offset=float(offset),
             yshift=float(yshift),
         )
-
+        # Filter out cuboids in the ego car area (near center)
+       
         cuboids.append(
             {
-                "obb_2d": box["obb"],
+                "local_id": len(cuboids),
                 "corners": corners,  # (8,3)
-                "label": box.get("label", 0),
+                "label": box.get("label"),
                 "color": box.get("color", [1.0, 1.0, 0.0]),
                 "h_max": float(h_max),
                 "final_h": float(final_h),
             }
         )
+    
 
-    return cuboids
+    return cuboids 
 
 
 # ============================================================
@@ -244,11 +244,11 @@ def build_bev_3d_annotation(
     """
     objects: List[Dict] = []
 
-    for local_id, c in enumerate(cuboids):
+    for c in cuboids:
         objects.append(
             {
                 "frame": int(frame_id),
-                "local_id": int(local_id),
+                "local_id": int(c.get("local_id")),
                 "label": c.get("color"),  # optional: keep if useful
                 "obb": cuboid_to_bev_obb(c["corners"]),
                 "meta": {
@@ -441,8 +441,8 @@ def parse_args():
     ap.add_argument("--id", required=True, help="Frame id (filename stem)")
     ap.add_argument("--resolution", type=float, default=100 / (6 * 400))
     ap.add_argument("--min-area", type=int, default=50)
-    ap.add_argument("--offset", type=float, default=33.0)
-    ap.add_argument("--yshift", type=float, default=-0.3)
+    ap.add_argument("--offset", type=float, default=36.0)
+    ap.add_argument("--yshift", type=float, default=-0.4)
     ap.add_argument("--vis", action="store_true", help="Visualize annotation in Open3D")
     ap.add_argument("--vis-cam", action="store_true", help="Also visualize camera extrinsics")
     ap.add_argument("--dump-json", action="store_true", help="Print JSON annotation to stdout")

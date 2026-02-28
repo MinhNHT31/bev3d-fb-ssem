@@ -38,3 +38,9 @@ videos/
 
 #weight 
 *.pt
+# code
+mask_maker.py
+# Jupyter
+masks/test.ipynb
+
+data/images*
